@@ -16,6 +16,7 @@ uniform float u_lat;
 uniform sampler2D u_earth;
 uniform float u_loaded;
 uniform float u_time;
+uniform float u_safeAlpha;
 const float PI=3.14159265359;
 void main(){
  vec2 pixel=vec2(gl_FragCoord.x,u_viewport.y-gl_FragCoord.y);
@@ -28,7 +29,7 @@ void main(){
    float band=1.-smoothstep(.05,.28,sqrt(d)-1.);
    vec2 c=vec2(-.73,.30);float halo=max(0.,dot(normalize(p),normalize(c)));
    float glow=pow(halo,4.)*band*.26;
-   outColor=vec4(vec3(.70,.78,.69),glow);return;
+   outColor=vec4(vec3(.70,.78,.69)*mix(1.,glow,u_safeAlpha),glow);return;
   }
   float z=sqrt(max(0.,1.-d));
   vec3 n=vec3(p.x,p.y,z);
@@ -55,14 +56,15 @@ void main(){
   light*=smoothstep(.03,.22,z);
   float shimmer=.985+.015*sin(u_time*.00031+m*12.);
   light*=shimmer;
-  outColor=vec4(vec3(.68,.76,.69),clamp(light,0.,.98));
+  float alpha=clamp(light,0.,.98);
+  outColor=vec4(vec3(.68,.76,.69)*mix(1.,alpha,u_safeAlpha),alpha);
 }`;
 function compile(gl,type,source){const shader=gl.createShader(type);gl.shaderSource(shader,source);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){const why=gl.getShaderInfoLog(shader);gl.deleteShader(shader);throw new Error('Globe shader: '+why);}return shader;}
 export class GlobeRenderer {
- constructor(canvas,{disabled=false}={}){
-  this.canvas=canvas;this.ready=false;this.textureReady=false;
+ constructor(canvas,{disabled=false,compositorSafe=false}={}){
+  this.canvas=canvas;this.ready=false;this.textureReady=false;this.compositorSafe=Boolean(compositorSafe);
   if(disabled)return;
-  let gl;try{gl=canvas.getContext('webgl2',{alpha:true,antialias:false,depth:false,stencil:false,premultipliedAlpha:false,preserveDrawingBuffer:false});}catch(e){console.warn('WebGL context unavailable:',e);return;}
+  let gl;try{gl=canvas.getContext('webgl2',{alpha:true,antialias:false,depth:false,stencil:false,premultipliedAlpha:this.compositorSafe,preserveDrawingBuffer:false});}catch(e){console.warn('WebGL context unavailable:',e);return;}
   if(!gl)return;
   this.gl=gl;
   try{
@@ -72,7 +74,7 @@ export class GlobeRenderer {
    this.program=program;gl.useProgram(program);
    const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
    const loc=gl.getAttribLocation(program,'a_position');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
-   this.uniforms={};for(const key of ['viewport','center','radius','lon','lat','earth','loaded','time'])this.uniforms[key]=gl.getUniformLocation(program,'u_'+key);
+   this.uniforms={};for(const key of ['viewport','center','radius','lon','lat','earth','loaded','time','safeAlpha'])this.uniforms[key]=gl.getUniformLocation(program,'u_'+key);
    this.texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.texture);
    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
@@ -84,6 +86,6 @@ export class GlobeRenderer {
   }catch(e){console.warn('WebGL globe unavailable:',e);this.ready=false;}
  }
  resize(width,height,dpr){if(!this.ready)return;this.dpr=dpr;const w=Math.round(width*dpr),h=Math.round(height*dpr);if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;this.canvas.style.width=width+'px';this.canvas.style.height=height+'px';this.gl.viewport(0,0,w,h);}}
- render(lon,lat,cx,cy,radius,time=0){if(!this.ready)return false;try{const gl=this.gl,d=this.dpr||1;gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(this.uniforms.viewport,this.canvas.width,this.canvas.height);gl.uniform2f(this.uniforms.center,cx*d,cy*d);gl.uniform1f(this.uniforms.radius,radius*d);gl.uniform1f(this.uniforms.lon,lon*Math.PI/180);gl.uniform1f(this.uniforms.lat,lat*Math.PI/180);gl.uniform1f(this.uniforms.loaded,this.textureReady?1:0);gl.uniform1f(this.uniforms.time,time);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.texture);gl.uniform1i(this.uniforms.earth,0);gl.drawArrays(gl.TRIANGLES,0,6);return true;}catch(error){console.warn('Globe render failure:',error);this.ready=false;return false;}}
+ render(lon,lat,cx,cy,radius,time=0){if(!this.ready)return false;try{const gl=this.gl,d=this.dpr||1;gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(this.uniforms.viewport,this.canvas.width,this.canvas.height);gl.uniform2f(this.uniforms.center,cx*d,cy*d);gl.uniform1f(this.uniforms.radius,radius*d);gl.uniform1f(this.uniforms.lon,lon*Math.PI/180);gl.uniform1f(this.uniforms.lat,lat*Math.PI/180);gl.uniform1f(this.uniforms.loaded,this.textureReady?1:0);gl.uniform1f(this.uniforms.time,time);gl.uniform1f(this.uniforms.safeAlpha,this.compositorSafe?1:0);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.texture);gl.uniform1i(this.uniforms.earth,0);gl.drawArrays(gl.TRIANGLES,0,6);return true;}catch(error){console.warn('Globe render failure:',error);this.ready=false;return false;}}
  destroy(){this.ready=false;}
 }

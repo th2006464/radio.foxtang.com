@@ -33,3 +33,11 @@
 
 ## 本轮性能测试重点
 请分别在禁用缓存首次访问、普通刷新、连续拖动地球 10 秒三个场景观察。对照电脑的光点质感和标题字形；旧设备进入 Canvas2D 后备时允许点密度降低，但不能出现黑屏。模拟 iPhone User-Agent 的 Chromium 不是原生 iOS Safari，不能替代真机验收。
+
+## Safari 全屏浅绿色球体（已修复代码、待真机复验）
+- 现象：背景与文字正常，但一颗浅绿色、几乎不透明的圆遮住页面内容；不是网络图片请求失败，也不是预期的 Canvas 降级。
+- 原因假设（符合截图与源代码）：Shader 的低亮度碎片为 `vec4(vec3(.68,.76,.69), alpha)`，仅在 alpha 值中保存光点亮度。移动 WebKit 合成层如果忽略片元 alpha、却展示 RGB，就会将球面整个刷成固定浅绿色。
+- 修复：移动 iPhone/iPad 的 WebGL context 设置 `premultipliedAlpha:true`，GPU Shader 中球面与光晕的 RGB 都乘对应 alpha，再交给合成器；桌面 `premultipliedAlpha:false` 与现有视觉输出完全不变。
+- 布局：390×844 CSS viewport 中，手机首页球体半径约 166 CSS px、中心 y≈388，避免过早侵占顶部标题区域。桌面地球计算不变。
+- 验收：清除 Safari 缓存后查看，地球应由细密明暗点阵组成、背景透出、无浅绿色大色块；启动后和拖动时均不能变实心球；手机短屏及横屏也要检查。
+- 局限：电脑上的 iPhone User-Agent 模拟是 Chromium，无法证明真实 WebKit 合成修复；需要用户 Safari 真机截图确认。

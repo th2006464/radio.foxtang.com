@@ -112,7 +112,7 @@ export class Universe {
   this.landing=true;this.introRotation=104;this.introTilt=14;this.introVelocityX=0;this.introVelocityY=0;this.width=1;this.height=1;this.last=0;this.running=true;this.reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   this.bg=this.makeStars(1100);this.pointer=null;this.dragged=false;this.target=null;this.globeTransition=null;this.landingStation=null;this.introGoal=null;
   this.globeCanvas=document.getElementById('globeCanvas');this.markerCanvas=document.getElementById('markersCanvas');this.markerCtx=this.markerCanvas.getContext('2d');
-  this.mobile=isAppleMobileWebKit();this.globe=new GlobeRenderer(this.globeCanvas);this.fallback=new PointGlobeFallback();this.tooltip=document.getElementById('mapTip');
+  this.mobile=isAppleMobileWebKit();this.globe=new GlobeRenderer(this.globeCanvas,{compositorSafe:this.mobile});this.fallback=new PointGlobeFallback();this.tooltip=document.getElementById('mapTip');
   this.backgroundCache=null;this.backgroundCacheKey='';
   this.resize=()=>this.setSize();window.addEventListener('resize',this.resize);this.bind();this.setSize();this.setView('earth');
   this.frame=requestAnimationFrame(this.animate);
@@ -158,7 +158,7 @@ export class Universe {
  zoomBy(factor){const start=this.target?.zoom??this.zoom;this.target={rotation:this.target?.rotation??this.rotation,tilt:this.target?.tilt??this.tilt,zoom:Math.max(.65,Math.min(3.5,start*factor))};}
  reset(){this.target=null;this.panX=0;this.panY=0;this.zoom=1;this.rotation=-15;this.tilt=10;}
  closest(x,y,range=19){let found=null,best=range*range;for(const p of this.points){const d=(p.x-x)**2+(p.y-y)**2;if(d<best){best=d;found=p;}}return found;}
- introBounds(){const w=this.width,h=this.height;return w>740?{cx:w*.52,cy:h*.46,radius:Math.min(w*.43,h*.92,1050)}:{cx:w*.51,cy:Math.min(h*.43,340),radius:Math.min(w*.46,h*.26,240)};}
+ introBounds(){const w=this.width,h=this.height;return w>740?{cx:w*.52,cy:h*.46,radius:Math.min(w*.43,h*.92,1050)}:{cx:w*.51,cy:Math.min(h*.46,390),radius:Math.min(w*.425,h*.22,200)};}
  introHit(x,y){const {cx,cy,radius}=this.introBounds();return (x-cx)**2+(y-cy)**2<=(radius*1.08)**2;}
  moveTooltip(e){if(this.landing){this.tooltip.hidden=true;this.canvas.style.cursor=this.introHit(e.clientX,e.clientY)?'grab':'default';return;}
   if(this.view!=='earth'||this.dragged||this.pointer){this.tooltip.hidden=true;return;}

@@ -42,3 +42,11 @@
 - 手机首页半径 `min(w*.46,h*.26,240)`，略放大以贴近桌面视觉；标题用 `Georgia / Songti SC` 衬线字，按钮仍纵向适配。
 - 静态渐变与 1100 颗背景星点离屏缓存，不因地球旋转而全量重画；GPU 正常时不提前加载 2D 精细纹理。
 - 下次遇到 Safari 黑屏，应先查 GPU/context 状态，再决定如何回退；禁止简单恢复“所有 iPhone 一律禁用 WebGL2”的策略。
+
+## 7. Safari 的 Alpha 合成与视觉回归（2026-10-20）
+**切记：Shader 的可见效果不仅取决于 alpha 值，还取决于 GPU Canvas 与浏览器合成层对 RGB/alpha 的解释。**
+- 问题案例：WebGL context 用 `premultipliedAlpha:false`，Shader 对几乎整颗球输出 `RGB=(.68,.76,.69)`、`A=light`。当 iOS WebKit 的合成路径未正确应用 alpha 时，屏幕显示的是一颗巨大的浅绿色实心圆。
+- 处理方式：手机的 GPU context 用 `premultipliedAlpha:true`，球体点阵和球缘 halo 的 RGB 都先乘对应的 alpha；桌面保留原 straight-alpha 路径，保证现有桌面 UI 不变。
+- 不要只改 CSS `opacity` 或把大球涂成深色；需要从 WebGL fragment output 和 compositor 配对修复。
+- 手机布局参考：`introBounds()` 对 390×844 viewport，中心约 `(199,388)`、半径约 `166px`；参考版手机的球体不应从顶部 Logo 附近就开始铺满整个画面。
+- 新建功能时覆盖浏览器实际叠加测试：片元低亮度像素必须不能保留高亮 RGB；模拟测试只是回归门禁，最终仍需 iPhone Safari 实机确认。
