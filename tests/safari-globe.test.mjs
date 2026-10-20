@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { GlobeRenderer } from '../src/globe.js';
-import { isAppleMobileWebKit, seedGlobeDots } from '../src/scene.js';
+import { isAppleMobileWebKit, seedGlobeDots, Universe } from '../src/scene.js';
 
 const load = path => readFile(new URL('../'+path, import.meta.url), 'utf8');
 
@@ -40,7 +40,7 @@ test('Earth-only UI has no star-mode switch, and entry always enters same globe 
 test('iPhone attempts the same WebGL globe as desktop and lazily generates Canvas fallback', async () => {
  const [scene,globe]=await Promise.all([load('src/scene.js'),load('src/globe.js')]);
  assert.match(scene,/this\.mobile=isAppleMobileWebKit\(\)/);
- assert.match(scene,/new GlobeRenderer\(this\.globeCanvas\)/);
+ assert.match(scene,/new GlobeRenderer\(this\.globeCanvas,\{compositorSafe:this\.mobile\}\)/);
  assert.doesNotMatch(scene,/new GlobeRenderer\(this\.globeCanvas,\{disabled:this\.mobile/);
  assert.match(scene,/if\(!rendered\)this\.fallback\.draw/);
  assert.match(scene,/this\.dots=null;this\.lastKey=/);
@@ -56,6 +56,33 @@ test('mobile draw budgets and visual rhythm do not change desktop geometry', asy
  assert.match(scene,/this\.mobile\?\(this\.globe\.ready\?33:45\)/);
  assert.match(scene,/this\.backgroundCacheKey=/);
  assert.match(scene,/radius:Math\.min\(w\*\.43,h\*\.92,1050\)/);
- assert.match(scene,/radius:Math\.min\(w\*\.46,h\*\.26,240\)/);
+ assert.match(scene,/radius:Math\.min\(w\*\.425,h\*\.22,200\)/);
  assert.match(css,/\.welcome h1\{font-family:Georgia,"Songti SC"/);
+});
+
+test('Safari-safe point Earth premultiplies halo and dot RGB to avoid a pale opaque sphere', async () => {
+ const globe=await load('src/globe.js');
+ assert.match(globe,/uniform float u_safeAlpha;/);
+ assert.match(globe,/premultipliedAlpha:this\.compositorSafe/);
+ assert.match(globe,/outColor=vec4\(vec3\(\.70,\.78,\.69\)\*mix\(1\.,glow,u_safeAlpha\),glow\)/);
+ assert.match(globe,/outColor=vec4\(vec3\(\.68,\.76,\.69\)\*mix\(1\.,alpha,u_safeAlpha\),alpha\)/);
+ assert.match(globe,/gl\.uniform1f\(this\.uniforms\.safeAlpha,this\.compositorSafe\?1:0\)/);
+ assert.ok(.76*.04<.04,'dim fragments cannot retain full green RGB if the compositor ignores alpha');
+});
+
+test('iPhone WebGL requests premultiplied output; desktop preserves straight alpha', () => {
+ let mobileOptions,desktopOptions;
+ new GlobeRenderer({getContext:(_,options)=>{mobileOptions=options;return null;}},{compositorSafe:true});
+ new GlobeRenderer({getContext:(_,options)=>{desktopOptions=options;return null;}});
+ assert.equal(mobileOptions.premultipliedAlpha,true);
+ assert.equal(desktopOptions.premultipliedAlpha,false);
+});
+
+test('phone globe matches reference size and position without changing desktop geometry',()=>{
+ const mobile=Universe.prototype.introBounds.call({width:390,height:844});
+ assert.ok(mobile.radius>155&&mobile.radius<180);
+ assert.ok(mobile.cy-mobile.radius>210);
+ assert.ok(mobile.cy+mobile.radius<575);
+ const desktop=Universe.prototype.introBounds.call({width:1440,height:900});
+ assert.equal(desktop.radius,Math.min(1440*.43,900*.92,1050));
 });

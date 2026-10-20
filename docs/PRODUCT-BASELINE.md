@@ -27,3 +27,9 @@
 
 ## 下一次迭代
 先从此基线分支或当前 `main` 创建功能分支；涉及画面/手势的变更同步更新 `docs/UI-GLOBE-PLAYBOOK.md` 和 `docs/SAFARI-TESTING.md`，新增回归测试，并在生产真机验收后创建新的固定基线引用。
+
+## 2026-10-20 v3 Safari Alpha 修复候选
+- 对应问题：真实 iPhone 截图出现浅绿色实心地球，遮挡首页文字。
+- 核心修复：移动 WebGL 使用预乘 Alpha 输出和匹配的 Context；只调整移动首页地球比例与位置，桌面保持此前验证过的材质和布局。
+- 发布后使用 `baseline/radio-2026-10-20-v3-safari-alpha` 固定已部署的 Merge Commit，保留 v1、v2 不变；**仅表示部署来源，不代表 Safari 视觉实机通过**。
+- 用户确认 iPhone Safari 真机正常后，再将本次视觉验收标为通过；如果失败应以 v2 的可靠 Git 引用回滚或准备补丁，而不是声称该版已稳定。
