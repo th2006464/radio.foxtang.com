@@ -30,7 +30,7 @@ export class Universe {
  constructor(canvas,onSelect){
   this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:false});this.onSelect=onSelect;
   this.stations=[];this.stars=[];this.points=[];this.active='';this.view='sky';this.panX=0;this.panY=0;this.zoom=1;this.rotation=-15;this.tilt=10;
-  this.landing=true;this.introRotation=104;this.width=1;this.height=1;this.last=0;this.running=true;this.reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  this.landing=true;this.introRotation=104;this.introTilt=14;this.introVelocityX=0;this.introVelocityY=0;this.width=1;this.height=1;this.last=0;this.running=true;this.reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   this.bg=this.makeStars(1100);this.pointer=null;this.dragged=false;this.target=null;
   this.globeCanvas=document.getElementById('globeCanvas');this.markerCanvas=document.getElementById('markersCanvas');this.markerCtx=this.markerCanvas.getContext('2d');
   this.globe=new GlobeRenderer(this.globeCanvas);this.tooltip=document.getElementById('mapTip');
@@ -44,7 +44,7 @@ export class Universe {
  }
  setStations(stations){this.stations=stations.slice(0,4500);this.stars=this.stations.slice(0,3200).map((s,i)=>{const r=randomFrom(hash(s.stationuuid||s.name||i));const genre=stationGenre(s),center=clusters[genre],a=r()*Math.PI*2;
   const radius=.07+Math.pow(r(),.55)*.29;return {station:s,x:center[0]+Math.cos(a)*radius*1.38,y:center[1]+Math.sin(a)*radius*.82,size:.7+r()*1.45,genre,phase:r()*6.28};});}
- setLanding(enabled){this.landing=!!enabled;this.globeCanvas.hidden=!this.landing&&this.view!=='earth';this.markerCanvas.hidden=this.landing||this.view!=='earth';this.lastGpuKey=null;}
+ setLanding(enabled){this.landing=!!enabled;this.introVelocityX=0;this.introVelocityY=0;this.pointer=null;this.dragged=false;this.globeCanvas.hidden=!this.landing&&this.view!=='earth';this.markerCanvas.hidden=this.landing||this.view!=='earth';this.lastGpuKey=null;}
  setView(view){this.view=view==='earth'?'earth':'sky';this.globeCanvas.hidden=!this.landing&&this.view!=='earth';this.markerCanvas.hidden=this.landing||this.view!=='earth';this.lastGpuKey=null;this.tooltip.hidden=true;
   if(this.view==='earth'&&this.active){const selected=this.selectedStation||this.stations.find(s=>s.stationuuid===this.active);if(selected)this.focus(selected);}}
  select(station){this.selectedStation=station;this.active=station?.stationuuid||'';if(this.view==='earth'&&station)this.focus(station);}
@@ -53,18 +53,46 @@ export class Universe {
  zoomBy(factor){const start=this.target?.zoom??this.zoom;this.target={rotation:this.target?.rotation??this.rotation,tilt:this.target?.tilt??this.tilt,zoom:Math.max(.65,Math.min(3.5,start*factor))};}
  reset(){this.target=null;this.panX=0;this.panY=0;this.zoom=1;this.rotation=-15;this.tilt=10;}
  closest(x,y,range=19){let found=null,best=range*range;for(const p of this.points){const d=(p.x-x)**2+(p.y-y)**2;if(d<best){best=d;found=p;}}return found;}
- moveTooltip(e){if(this.view!=='earth'||this.dragged||this.pointer){this.tooltip.hidden=true;return;}
+ introBounds(){const w=this.width,h=this.height;return {cx:w*.51,cy:w>740?h*.45:Math.min(h*.448,315),radius:Math.min(w*.414,h*.245,210)};}
+ introHit(x,y){const {cx,cy,radius}=this.introBounds();return (x-cx)**2+(y-cy)**2<=(radius*1.08)**2;}
+ moveTooltip(e){if(this.landing){this.tooltip.hidden=true;this.canvas.style.cursor=this.introHit(e.clientX,e.clientY)?'grab':'default';return;}
+  if(this.view!=='earth'||this.dragged||this.pointer){this.tooltip.hidden=true;return;}
   const found=this.closest(e.clientX,e.clientY,17);this.tooltip.hidden=!found;this.canvas.style.cursor=found?'pointer':'grab';if(found){this.tooltip.textContent=[found.station.name,found.station.state,found.station.country].filter(Boolean).join(' · ');this.tooltip.style.left=Math.min(this.width-230,e.clientX+18)+'px';this.tooltip.style.top=Math.max(100,e.clientY-45)+'px';}}
  bind(){const c=this.canvas;
-  c.addEventListener('pointerdown',e=>{this.pointer={x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY};this.dragged=false;this.target=null;this.tooltip.hidden=true;c.setPointerCapture(e.pointerId);});
-  c.addEventListener('pointermove',e=>{if(!this.pointer){this.moveTooltip(e);return;}const dx=e.clientX-this.pointer.lastX,dy=e.clientY-this.pointer.lastY;
-    if(Math.hypot(e.clientX-this.pointer.x,e.clientY-this.pointer.y)>6)this.dragged=true;
-    if(this.dragged){if(this.view==='sky'){this.panX+=dx;this.panY+=dy;}else{this.rotation-=dx*.3/Math.sqrt(this.zoom);this.tilt=Math.max(-82,Math.min(82,this.tilt+dy*.3/Math.sqrt(this.zoom)));}}
-    this.pointer.lastX=e.clientX;this.pointer.lastY=e.clientY;});
-  c.addEventListener('pointerup',e=>{if(!this.dragged){const hit=this.closest(e.clientX,e.clientY,20);if(hit)this.onSelect(hit.station);}this.pointer=null;this.dragged=false;});
-  c.addEventListener('pointercancel',()=>{this.pointer=null;this.dragged=false;});
+  c.addEventListener('pointerdown',e=>{
+   if(this.pointer||this.landing&&!this.introHit(e.clientX,e.clientY))return;
+   this.pointer={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,lastTime:e.timeStamp||0,mode:this.landing?'intro':'explore'};
+   this.dragged=false;this.target=null;this.tooltip.hidden=true;
+   if(this.landing){this.introVelocityX=0;this.introVelocityY=0;c.style.cursor='grabbing';}
+   c.setPointerCapture?.(e.pointerId);
+  });
+  c.addEventListener('pointermove',e=>{
+   if(!this.pointer){this.moveTooltip(e);return;}
+   if(e.pointerId!==this.pointer.id)return;
+   const dx=e.clientX-this.pointer.lastX,dy=e.clientY-this.pointer.lastY;
+   if(Math.hypot(e.clientX-this.pointer.x,e.clientY-this.pointer.y)>5)this.dragged=true;
+   if(this.dragged){
+    if(this.pointer.mode==='intro'){
+     const ms=Math.max(8,Math.min(64,(e.timeStamp||0)-this.pointer.lastTime||16));
+     const lonStep=-dx*.34,latStep=dy*.28;
+     this.introRotation+=lonStep;
+     this.introTilt=Math.max(-78,Math.min(78,this.introTilt+latStep));
+     if(!this.reduce){this.introVelocityX=Math.max(-.17,Math.min(.17,lonStep/ms));this.introVelocityY=Math.max(-.13,Math.min(.13,latStep/ms));}
+    }else if(this.view==='sky'){this.panX+=dx;this.panY+=dy;}
+    else{this.rotation-=dx*.3/Math.sqrt(this.zoom);this.tilt=Math.max(-82,Math.min(82,this.tilt+dy*.3/Math.sqrt(this.zoom)));}
+   }
+   this.pointer.lastX=e.clientX;this.pointer.lastY=e.clientY;this.pointer.lastTime=e.timeStamp||this.pointer.lastTime;
+  });
+  c.addEventListener('pointerup',e=>{
+   if(!this.pointer||e.pointerId!==this.pointer.id)return;
+   // Tapping the intro globe never opens the explorer: only the explicit CTA does.
+   if(this.pointer.mode!=='intro'&&!this.dragged){const hit=this.closest(e.clientX,e.clientY,20);if(hit)this.onSelect(hit.station);}
+   if(this.pointer.mode==='intro'&&!this.dragged){this.introVelocityX=0;this.introVelocityY=0;}
+   this.pointer=null;this.dragged=false;this.moveTooltip(e);
+  });
+  c.addEventListener('pointercancel',()=>{this.pointer=null;this.dragged=false;this.introVelocityX=0;this.introVelocityY=0;this.canvas.style.cursor='grab';});
   c.addEventListener('pointerleave',()=>{this.tooltip.hidden=true;});
-  c.addEventListener('wheel',e=>{e.preventDefault();this.zoomBy(e.deltaY>0?.88:1.14);},{passive:false});
+  c.addEventListener('wheel',e=>{if(this.landing)return;e.preventDefault();this.zoomBy(e.deltaY>0?.88:1.14);},{passive:false});
  }
  drawBackground(t){const c=this.ctx,w=this.width,h=this.height;c.fillStyle=this.landing?'#101f1d':'#101e1b';c.fillRect(0,0,w,h);
   const gradient=c.createRadialGradient(w*.47,h*.46,0,w*.5,h*.5,Math.max(w,h)*.72);gradient.addColorStop(0,this.landing?'#172723':'#192c24');gradient.addColorStop(.55,this.landing?'#0f211d':'#101d1b');gradient.addColorStop(1,'#081512');c.fillStyle=gradient;c.fillRect(0,0,w,h);
@@ -78,7 +106,19 @@ export class Universe {
    const twinkle=this.reduce?1:.82+Math.sin(t*.0012+p.phase)*.18,r=(active?3.5:p.size)*Math.min(1.55,Math.sqrt(this.zoom));
    if(active){c.strokeStyle='rgba(190,202,255,.7)';c.lineWidth=1;c.beginPath();c.arc(x,y,16+2*Math.sin(t*.002),0,6.283);c.stroke();}
    c.fillStyle=`rgba(${palette[p.genre]},${active?1:Math.min(.94,twinkle*.76)})`;c.beginPath();c.arc(x,y,r,0,6.283);c.fill();this.points.push({x,y,station:p.station});}}
- drawLanding(t,dt){const w=this.width,h=this.height;const radius=Math.min(w*.414,h*.245,210);const cx=w*.51;const cy=w>740?h*.45:Math.min(h*.448,315);this.introRotation+=(this.reduce?0:dt*.00185);this.globe.render(this.introRotation,14,cx,cy,radius,1,t);this.points=[];}
+ drawLanding(t,dt){const {cx,cy,radius}=this.introBounds();
+  if(!this.pointer||this.pointer.mode!=='intro'){
+   if(!this.reduce){
+    const moving=Math.abs(this.introVelocityX)+Math.abs(this.introVelocityY)>.00012;
+    if(moving){
+     this.introRotation+=this.introVelocityX*dt;
+     this.introTilt=Math.max(-78,Math.min(78,this.introTilt+this.introVelocityY*dt));
+     const friction=Math.exp(-dt/510);this.introVelocityX*=friction;this.introVelocityY*=friction;
+    }else{this.introVelocityX=0;this.introVelocityY=0;this.introRotation+=dt*.00185;}
+   }
+  }
+  this.globe.render(this.introRotation,this.introTilt,cx,cy,radius,1,t);this.points=[];
+ }
  drawEarth(t){const w=this.width,h=this.height;const radius=Math.min(w*.38,h*.39)*this.zoom,cx=w/2,cy=h*.48;
   const gpuKey=[this.rotation.toFixed(4),this.tilt.toFixed(4),radius.toFixed(3),this.globe.textureReady,this.width,this.height].join(':');
   const changed=gpuKey!==this.lastGpuKey;this.lastGpuKey=gpuKey;
