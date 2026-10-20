@@ -59,9 +59,10 @@ void main(){
 }`;
 function compile(gl,type,source){const shader=gl.createShader(type);gl.shaderSource(shader,source);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){const why=gl.getShaderInfoLog(shader);gl.deleteShader(shader);throw new Error('Globe shader: '+why);}return shader;}
 export class GlobeRenderer {
- constructor(canvas){
+ constructor(canvas,{disabled=false}={}){
   this.canvas=canvas;this.ready=false;this.textureReady=false;
-  const gl=canvas.getContext('webgl2',{alpha:true,antialias:false,depth:false,stencil:false,premultipliedAlpha:false,preserveDrawingBuffer:false,powerPreference:'high-performance'});
+  if(disabled)return;
+  let gl;try{gl=canvas.getContext('webgl2',{alpha:true,antialias:false,depth:false,stencil:false,premultipliedAlpha:false,preserveDrawingBuffer:false});}catch(e){console.warn('WebGL context unavailable:',e);return;}
   if(!gl)return;
   this.gl=gl;
   try{
@@ -77,12 +78,12 @@ export class GlobeRenderer {
    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([3,22,48,255]));
    this.ready=true;
-   const image=new Image();image.decoding='async';image.onload=()=>{if(!this.ready)return;gl.bindTexture(gl.TEXTURE_2D,this.texture);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,image);gl.generateMipmap(gl.TEXTURE_2D);this.textureReady=true;};
+   const image=new Image();image.decoding='async';image.onload=()=>{if(!this.ready)return;gl.bindTexture(gl.TEXTURE_2D,this.texture);try{gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,image);gl.generateMipmap(gl.TEXTURE_2D);this.textureReady=true;}catch(error){console.warn('Earth texture unavailable:',error);this.ready=false;}};
    image.src='/earth.webp';
    canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();this.ready=false;});
   }catch(e){console.warn('WebGL globe unavailable:',e);this.ready=false;}
  }
  resize(width,height,dpr){if(!this.ready)return;this.dpr=dpr;const w=Math.round(width*dpr),h=Math.round(height*dpr);if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;this.canvas.style.width=width+'px';this.canvas.style.height=height+'px';this.gl.viewport(0,0,w,h);}}
- render(lon,lat,cx,cy,radius,time=0){if(!this.ready)return false;const gl=this.gl,d=this.dpr||1;gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(this.uniforms.viewport,this.canvas.width,this.canvas.height);gl.uniform2f(this.uniforms.center,cx*d,cy*d);gl.uniform1f(this.uniforms.radius,radius*d);gl.uniform1f(this.uniforms.lon,lon*Math.PI/180);gl.uniform1f(this.uniforms.lat,lat*Math.PI/180);gl.uniform1f(this.uniforms.loaded,this.textureReady?1:0);gl.uniform1f(this.uniforms.time,time);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.texture);gl.uniform1i(this.uniforms.earth,0);gl.drawArrays(gl.TRIANGLES,0,6);return true;}
+ render(lon,lat,cx,cy,radius,time=0){if(!this.ready)return false;try{const gl=this.gl,d=this.dpr||1;gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.useProgram(this.program);gl.uniform2f(this.uniforms.viewport,this.canvas.width,this.canvas.height);gl.uniform2f(this.uniforms.center,cx*d,cy*d);gl.uniform1f(this.uniforms.radius,radius*d);gl.uniform1f(this.uniforms.lon,lon*Math.PI/180);gl.uniform1f(this.uniforms.lat,lat*Math.PI/180);gl.uniform1f(this.uniforms.loaded,this.textureReady?1:0);gl.uniform1f(this.uniforms.time,time);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.texture);gl.uniform1i(this.uniforms.earth,0);gl.drawArrays(gl.TRIANGLES,0,6);return true;}catch(error){console.warn('Globe render failure:',error);this.ready=false;return false;}}
  destroy(){this.ready=false;}
 }

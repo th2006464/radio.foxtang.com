@@ -27,8 +27,8 @@ test('desktop landing globe is larger than mobile and shares the earth renderer'
  assert.ok(css.includes('body.returning .welcome h1'));
 });
 test('Foxtang identity remains and actual station coordinate provenance is honest',()=>{
- assert.ok(html.includes('<span>Foxtang Radio</span>'));
- assert.ok(html.includes('logo.foxtang.com/portraits/default-blue-transparent.png'));
+ assert.ok(html.includes('<span>Radio</span>'));
+ assert.ok(html.includes('logo.foxtang.com/avatars-512/set-05/media.png'));
  assert.ok(html.includes('电台坐标来自 Radio Browser'));
  assert.ok(!html.includes('地理数据来自'));
 });
