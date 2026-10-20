@@ -1,6 +1,6 @@
 import { GlobeRenderer } from './globe.js';
-// Canvas starfield and station markers, plus WebGL point-earth and orthographic globe.
-// Coordinates in earth mode only come from actual Radio Browser geo data.
+// Earth-only explorer with a shared point cloud, geographic markers and Safari-safe fallback.
+// Radio markers appear only where the Radio Browser catalog provides valid coordinates.
 export function hash(value) { let h = 2166136261; for (const c of String(value)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
 export function randomFrom(seed) { let s = seed >>> 0; return () => { s = (Math.imul(1664525, s) + 1013904223) >>> 0; return s / 4294967296; }; }
 export function stationGenre(station) { const s = String(station.tags || '').toLowerCase(); if (/jazz|soul|blues|funk/.test(s)) return 1; if (/rock|metal|punk|alternative/.test(s)) return 2; if (/classic|opera|instrumental|piano/.test(s)) return 3; if (/techno|dance|electro|trance|house/.test(s)) return 4; if (/news|talk|sport|politic/.test(s)) return 5; return 0; }
@@ -12,8 +12,7 @@ export function projectGlobe(lat,lon,rotation,tilt=0) {
 }
 export function nearestLongitude(current,target){return current+((((target-current)%360)+540)%360)-180;}
 export function formatCoordinates(lat,lon){if(!Number.isFinite(lat)||!Number.isFinite(lon))return '';return `${Math.abs(lat).toFixed(2)}°${lat>=0?'N':'S'} · ${Math.abs(lon).toFixed(2)}°${lon>=0?'E':'W'}`;}
-const clusters = [ [-.04,-.07],[-.49,-.27],[.37,-.3],[-.44,.36],[.39,.3],[.04,.4] ];
-const palette = ['162,172,255','227,168,223','152,193,255','190,222,244','196,176,250','132,220,204'];
+export function isAppleMobileWebKit(ua=(typeof navigator!=='undefined'?navigator.userAgent:''),platform=(typeof navigator!=='undefined'?navigator.platform:''),touchPoints=(typeof navigator!=='undefined'?navigator.maxTouchPoints:0)){return /iPad|iPhone|iPod/.test(ua)||(/Macintosh|MacIntel/.test(ua+' '+platform)&&touchPoints>1&&/AppleWebKit/.test(ua));}
 const continents = [
 [[-168,68],[-146,70],[-137,61],[-126,57],[-123,49],[-130,47],[-124,41],[-117,32],[-111,31],[-105,24],[-98,19],[-91,18],[-86,22],[-81,25],[-81,30],[-75,36],[-72,43],[-66,45],[-60,52],[-81,58],[-94,71],[-109,72],[-129,69],[-153,72]],
 [[-82,12],[-73,11],[-65,10],[-59,7],[-51,4],[-48,-2],[-42,-9],[-37,-12],[-38,-20],[-47,-24],[-50,-30],[-54,-34],[-69,-55],[-74,-45],[-71,-28],[-78,-14],[-81,-4]],
@@ -26,10 +25,21 @@ const continents = [
 [[-8,50],[-5,54],[-7,58],[-11,55]],
 [[167,-35],[174,-41],[178,-39],[171,-34]]
 ];
+// Outline-seeded dot globe renders immediately, even when Safari delays image decoding.
+function insideContinent(lon,lat,poly){let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+ const a=poly[i],b=poly[j];if((a[1]>lat)!==(b[1]>lat)&&lon<(b[0]-a[0])*(lat-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+}return inside;}
+export function seedGlobeDots(){const dots=[];for(let latitude=-84;latitude<=84;latitude+=3){const lat=latitude*Math.PI/180;
+ for(let longitude=-177;longitude<=180;longitude+=3){const salt=((longitude*71+latitude*53+903721)%101+101)%101/101;
+ const land=continents.some(poly=>insideContinent(longitude,latitude,poly));
+ if(!land&&salt<.94)continue;
+ const level=land?(salt>.95?3:salt>.7?2:1):0;
+ dots.push({lon:longitude*Math.PI/180,sin:Math.sin(lat),cos:Math.cos(lat),level});
+ }}return dots;}
 // Canvas2D safety net for browsers without WebGL2. Same bundled Earth imagery.
 class PointGlobeFallback {
  constructor(){
-  this.dots=null;this.lastKey='';this.cache=null;
+  this.dots=seedGlobeDots();this.lastKey='';this.cache=null;
   if(typeof Image==='undefined'||typeof document==='undefined'||typeof document.createElement!=='function')return;
   this.cache=document.createElement('canvas');this.ctx=this.cache.getContext('2d');
   if(!this.ctx)return;
@@ -40,8 +50,8 @@ class PointGlobeFallback {
     c.drawImage(im,0,0,sample.width,sample.height);
     const rgba=c.getImageData(0,0,sample.width,sample.height).data;
     const dots=[];
-    for(let y=2;y<sample.height-2;y+=3){const lat=(.5-y/sample.height)*Math.PI;
-     for(let x=2;x<sample.width;x+=3){const offset=(y*sample.width+x)*4;
+    for(let y=2;y<sample.height-2;y+=4){const lat=(.5-y/sample.height)*Math.PI;
+     for(let x=2;x<sample.width;x+=4){const offset=(y*sample.width+x)*4;
       const r=rgba[offset],g=rgba[offset+1],b=rgba[offset+2];
       const signal=r*.86+g*.78-b*.9;
       const salt=((x*73+y*137)%101)/101;
@@ -89,12 +99,12 @@ class PointGlobeFallback {
 export class Universe {
  constructor(canvas,onSelect){
   this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:false});this.onSelect=onSelect;
-  this.stations=[];this.stars=[];this.points=[];this.active='';this.view='sky';this.panX=0;this.panY=0;this.zoom=1;this.rotation=-15;this.tilt=10;
+  this.stations=[];this.points=[];this.active='';this.view='earth';this.panX=0;this.panY=0;this.zoom=1;this.rotation=-15;this.tilt=10;
   this.landing=true;this.introRotation=104;this.introTilt=14;this.introVelocityX=0;this.introVelocityY=0;this.width=1;this.height=1;this.last=0;this.running=true;this.reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   this.bg=this.makeStars(1100);this.pointer=null;this.dragged=false;this.target=null;this.globeTransition=null;this.landingStation=null;this.introGoal=null;
   this.globeCanvas=document.getElementById('globeCanvas');this.markerCanvas=document.getElementById('markersCanvas');this.markerCtx=this.markerCanvas.getContext('2d');
-  this.globe=new GlobeRenderer(this.globeCanvas);this.fallback=new PointGlobeFallback();this.tooltip=document.getElementById('mapTip');
-  this.resize=()=>this.setSize();window.addEventListener('resize',this.resize);this.bind();this.setSize();this.setView('sky');
+  this.preferCanvas=isAppleMobileWebKit();this.globe=new GlobeRenderer(this.globeCanvas,{disabled:this.preferCanvas});this.fallback=new PointGlobeFallback();this.tooltip=document.getElementById('mapTip');
+  this.resize=()=>this.setSize();window.addEventListener('resize',this.resize);this.bind();this.setSize();this.setView('earth');
   this.frame=requestAnimationFrame(this.animate);
  }
  makeStars(n){const r=randomFrom(149734);return Array.from({length:n},()=>({x:r(),y:r(),size:r()*.95+.1,alpha:r()*.6+.15,phase:r()*6.3}));}
@@ -102,8 +112,7 @@ export class Universe {
   for(const canvas of [this.canvas,this.markerCanvas]){canvas.width=Math.round(this.width*dpr);canvas.height=Math.round(this.height*dpr);canvas.style.width=this.width+'px';canvas.style.height=this.height+'px';}
   this.ctx.setTransform(dpr,0,0,dpr,0,0);this.markerCtx.setTransform(dpr,0,0,dpr,0,0);this.globe.resize(this.width,this.height,dpr);
  }
- setStations(stations){this.stations=stations.slice(0,4500);this.stars=this.stations.slice(0,3200).map((s,i)=>{const r=randomFrom(hash(s.stationuuid||s.name||i));const genre=stationGenre(s),center=clusters[genre],a=r()*Math.PI*2;
-  const radius=.07+Math.pow(r(),.55)*.29;return {station:s,x:center[0]+Math.cos(a)*radius*1.38,y:center[1]+Math.sin(a)*radius*.82,size:.7+r()*1.45,genre,phase:r()*6.28};});}
+ setStations(stations){this.stations=stations.slice(0,4500);}
  setLanding(enabled){
   const next=!!enabled;
   if(next!==this.landing){
@@ -119,10 +128,9 @@ export class Universe {
    }
   }
   this.landing=next;this.introVelocityX=0;this.introVelocityY=0;this.pointer=null;this.dragged=false;
-  this.globeCanvas.hidden=!this.landing&&this.view!=='earth';this.markerCanvas.hidden=!this.landing&&this.view!=='earth';this.lastGpuKey=null;
+  this.globeCanvas.hidden=false;this.markerCanvas.hidden=false;this.lastGpuKey=null;
  }
- setView(view){this.view=view==='earth'?'earth':'sky';if(this.view==='sky')this.globeTransition=null;this.globeCanvas.hidden=!this.landing&&this.view!=='earth';this.markerCanvas.hidden=!this.landing&&this.view!=='earth';this.lastGpuKey=null;this.tooltip.hidden=true;
-  if(this.view==='earth'&&this.active){const selected=this.selectedStation||this.stations.find(s=>s.stationuuid===this.active);if(selected)this.focus(selected);}}
+ setView(_view='earth'){this.view='earth';this.globeCanvas.hidden=false;this.markerCanvas.hidden=false;this.lastGpuKey=null;this.tooltip.hidden=true;if(this.active){const selected=this.selectedStation||this.stations.find(s=>s.stationuuid===this.active);if(selected)this.focus(selected);}}
  setLandingStation(station){
   const valid=station&&Number.isFinite(station.geo_lat)&&Number.isFinite(station.geo_long)?station:null;
   if(this.landingStation?.stationuuid===valid?.stationuuid)return;
@@ -161,8 +169,7 @@ export class Universe {
      this.introRotation+=lonStep;
      this.introTilt=Math.max(-78,Math.min(78,this.introTilt+latStep));
      if(!this.reduce){this.introVelocityX=Math.max(-.17,Math.min(.17,lonStep/ms));this.introVelocityY=Math.max(-.13,Math.min(.13,latStep/ms));}
-    }else if(this.view==='sky'){this.panX+=dx;this.panY+=dy;}
-    else{this.rotation-=dx*.3/Math.sqrt(this.zoom);this.tilt=Math.max(-82,Math.min(82,this.tilt+dy*.3/Math.sqrt(this.zoom)));}
+    }else{this.rotation-=dx*.3/Math.sqrt(this.zoom);this.tilt=Math.max(-82,Math.min(82,this.tilt+dy*.3/Math.sqrt(this.zoom)));}
    }
    this.pointer.lastX=e.clientX;this.pointer.lastY=e.clientY;this.pointer.lastTime=e.timeStamp||this.pointer.lastTime;
   });
@@ -180,15 +187,6 @@ export class Universe {
  drawBackground(t){const c=this.ctx,w=this.width,h=this.height;c.fillStyle=this.landing?'#101f1d':'#101e1b';c.fillRect(0,0,w,h);
   const gradient=c.createRadialGradient(w*.47,h*.46,0,w*.5,h*.5,Math.max(w,h)*.72);gradient.addColorStop(0,this.landing?'#172723':'#192c24');gradient.addColorStop(.55,this.landing?'#0f211d':'#101d1b');gradient.addColorStop(1,'#081512');c.fillStyle=gradient;c.fillRect(0,0,w,h);
   for(const s of this.bg){const alpha=this.reduce?1:.88+Math.sin(t*.00053+s.phase)*.12;c.fillStyle=`rgba(203,219,202,${s.alpha*alpha*(this.landing?.32:.72)})`;c.fillRect(s.x*w,s.y*h,s.size,s.size);}}
- drawNebula(){const c=this.ctx,w=this.width,h=this.height,scale=Math.min(w,h)*.65*this.zoom;
-  for(let i=0;i<clusters.length;i++){const a=clusters[i],ox=w/2+this.panX+a[0]*scale*1.35,oy=h/2+this.panY+a[1]*scale,r=scale*.35;
-   c.save();c.translate(ox,oy);c.scale(1,.65);const g=c.createRadialGradient(0,0,0,0,0,r);g.addColorStop(0,`rgba(${palette[i]},.062)`);g.addColorStop(.4,`rgba(${palette[i]},.026)`);g.addColorStop(1,`rgba(${palette[i]},0)`);
-   c.fillStyle=g;c.beginPath();c.arc(0,0,r,0,6.283);c.fill();c.restore();}}
- drawSky(t){const c=this.ctx,w=this.width,h=this.height;this.drawNebula();const scale=Math.min(w,h)*.65*this.zoom,centerX=w/2+this.panX,centerY=h/2+this.panY;this.points=[];
-  for(const p of this.stars){const x=centerX+p.x*scale*1.35,y=centerY+p.y*scale;if(x<0||x>w||y<70||y>h-35)continue;const active=p.station.stationuuid===this.active;
-   const twinkle=this.reduce?1:.82+Math.sin(t*.0012+p.phase)*.18,r=(active?3.5:p.size)*Math.min(1.55,Math.sqrt(this.zoom));
-   if(active){c.strokeStyle='rgba(190,202,255,.7)';c.lineWidth=1;c.beginPath();c.arc(x,y,16+2*Math.sin(t*.002),0,6.283);c.stroke();}
-   c.fillStyle=`rgba(${palette[p.genre]},${active?1:Math.min(.94,twinkle*.76)})`;c.beginPath();c.arc(x,y,r,0,6.283);c.fill();this.points.push({x,y,station:p.station});}}
  drawLanding(t,dt){const {cx,cy,radius}=this.introBounds();
   if(!this.pointer||this.pointer.mode!=='intro'){
    if(!this.reduce){
@@ -262,11 +260,11 @@ export class Universe {
   }
  }
  animate=(t)=>{if(!this.running)return;
-  const frameInterval=this.landing||this.view==='earth'&&!this.reduce&&(this.globeTransition||this.target||(this.pointer&&this.dragged))?16:32;
+  const frameInterval=this.preferCanvas?40:this.landing||!this.reduce&&(this.globeTransition||this.target||(this.pointer&&this.dragged))?16:32;
   if(t-this.last>=frameInterval){const dt=Math.min(64,Math.max(1,t-this.last));this.last=t;
    if(this.target){const k=this.reduce?1:1-Math.exp(-dt/430);this.rotation+=(this.target.rotation-this.rotation)*k;this.tilt+=(this.target.tilt-this.tilt)*k;this.zoom+=(this.target.zoom-this.zoom)*k;
     if(Math.abs(this.rotation-this.target.rotation)<.03&&Math.abs(this.tilt-this.target.tilt)<.03&&Math.abs(this.zoom-this.target.zoom)<.003)this.target=null;}
-   this.drawBackground(t);if(this.landing)this.drawLanding(t,dt);else if(this.view==='earth')this.drawEarth(t);else this.drawSky(t);
+   this.drawBackground(t);if(this.landing)this.drawLanding(t,dt);else this.drawEarth(t);
   }
   this.frame=requestAnimationFrame(this.animate);
  };

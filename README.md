@@ -1,65 +1,38 @@
-# Radio Foxtang · Listen somewhere new
+# Radio · 全球实时电台
 
-Independently implemented live world-radio explorer, visually inspired by [RoamDial](https://roamdial.com/). Built for `radio.foxtang.com` using **zero frontend npm dependencies**, HTML/CSS/Canvas and **Cloudflare Pages Functions**. The upstream site's code, branding assets, images and data are not copied.
+独立实现的全球广播探索网站，生产访问地址：https://radio.foxtang.com/ 。页面品牌仅显示 **Radio**，左上角与浏览器标签使用自有媒体徽章。视觉参考 RoamDial，但不复制其专有代码或品牌。
 
-## Features
+## 产品基线功能
+- **地球唯一视图**：首页与收听时使用同一套光点地球与坐标系，支持拖动、惯性、镜头放大与台站定位；已移除星图与模式切换。
+- 全球 Radio Browser 公开广播目录、搜索、国家/地区显示、随机收听、码率/语言/类型筛选。
+- 上次收听、收藏、前后切台、分享、音量、中文和英文。
+- 桌面 WebGL2 GPU 光点；iPhone/iPad WebKit 优先使用可立即绘制的 Canvas2D 点阵后备，地理纹理加载后增强细节。
+- Cloudflare Pages Functions 仅提供电台目录 API；音频直连广播站。无 D1、KV、Cron、Secrets。
 
-- Immersive animated particle sky organized by genre, drag/zoom/click to tune into stations.
-- Orthographic 3D-style globe with station dots only where coordinates are actually provided.
-- Random next station, previous station, play/pause, volume, favorites, station sharing, and last-station persistence.
-- Search, bitrate/language filters, Chinese/English, and phone/tablet responsive layout.
-- Radio Browser API catalog proxy with mirror failover, short timeout, strict query allowlist, and 30-minute Cloudflare cache.
-- Audio plays **directly in the browser** from station HTTPS stream URLs; no audio proxy and **no D1, KV, secrets or Cron**.
+## 代码与文档
+| 路径 | 职责 |
+| --- | --- |
+| `index.html` / `src/style.css` | 响应式页面、品牌与交互层 |
+| `src/app.js` | 页面状态、音频播放、台站目录与收藏 |
+| `src/scene.js` | 地球相机、坐标投影、拖拽、Canvas2D 后备和定位 |
+| `src/globe.js` | WebGL2 光点材质与纹理 |
+| `earth.webp` | NASA Blue Marble 地理陆地遮罩 |
+| `functions/api/stations.js` | Radio Browser API 代理 |
+| `docs/ARCHITECTURE.md` | 模块与数据架构 |
+| `docs/UI-GLOBE-PLAYBOOK.md` | **UI 和地球实现经验、踩坑与复用方法** |
+| `docs/SAFARI-TESTING.md` | iOS Safari 后备与验收清单 |
+| `docs/PRODUCT-BASELINE.md` | Git 基线策略与发版操作 |
 
-## Cloudflare Pages deployment (for Luna)
-
-1. Connect GitHub repository `th2006464/radio.foxtang.com` to **Cloudflare Pages**.
-2. Use **no framework preset**, production branch `main`, build command `npm run build`, output directory `dist`.
-3. Cloudflare Pages automatically discovers `functions/api/stations.js` at project root and serves `/api/stations`.
-4. Bind the custom domain `radio.foxtang.com` to this *new Pages project*. Do **not** change any unrelated Cloudflare projects, routes, DNS or Access policies.
-5. Run `npm run check` before merge. Deployment requires **no secrets, database migrations or environment variables**.
-6. Verify `/api/stations?limit=5` returns JSON, landing screen loads and both Sky/Earth views work, station playback starts, and favorites persist. Some broadcasters may block browsers or regions; the app falls back to other stations.
-
-> IMPORTANT: `npm run dev` previews the static UI but not the Pages Function. For the complete live API locally: `npm run build && npx wrangler pages dev dist` (Wrangler is an external dev CLI, not a runtime dependency).
-
-## Runtime caveats
-
-- Radio Browser is community-maintained; source availability, format, legal access, and geographic metadata vary. HTTPS or non-HLS stations work in most modern browsers; browser-level autoplay and codec rules still apply.
-- If the Pages Function cannot reach Radio Browser, the browser tries public API mirrors directly as a fallback, subject to their CORS policies.
-- Favorites, preference and last station are stored only in the current browser's localStorage, not synced across devices.
-- Only station URLs with HTTPS are attempted; HTTP streams cannot be played by an HTTPS page without mixed-content problems.
-- No invented song metadata, fake audio waveforms, or location lookups. The UI uses decorative animated bars rather than representing them as real audio levels.
-
-## Commands
-
+## 开发与部署
 ```bash
-npm run dev     # static UI preview on http://localhost:4173
-npm run build   # generate dist/
-npm run check   # syntax, native Node tests, and build
+npm run check   # 语法检查 + 自动化测试 + 静态构建
+npm run dev     # 本地静态预览；Pages API 需 wrangler pages dev
+npm run build   # 生成 dist/
 ```
 
-## Globe update
+GitHub `main` 已连接 Cloudflare Pages 项目 `radio-foxtang-com`。生产构建命令 `npm run build`、产物目录 `dist`；合并主分支自动触发部署。**不要操作不相关的 DNS、Worker、D1、Access。**
 
-The Earth mode uses a **WebGL2 shader** and a locally bundled NASA Blue Marble Next Generation equirectangular JPEG (`earth.webp`). Earth imagery: NASA Earth Observatory / Reto Stöckli (Blue Marble Next Generation, https://earthobservatory.nasa.gov/features/BlueMarble). The UI renders dots exclusively from Radio Browser-provided `geo_lat` / `geo_long` values and shows the station's published region and country, not invented city labels. If a station omits geographic coordinates, the locate control is disabled. Stations are fetched through a Pages Function (top stations + geolocated random sample); markers are a sample, not a claim to exhaustively map every world broadcaster.
+合并后必须验证 Cloudflare Production deployment 的 `commit_hash` 与 Merge Commit 一致，且构建、页面和关键静态资源成功；以 `baseline/radio-2026-10-20-v1` 分支固定稳定提交（创建步骤见文档）。**自动化测试或桌面模拟不等于真实 iPhone Safari 实机验收。**
 
-The WebGL2 sphere and Canvas 2D station overlay are separate, and a basic fallback is provided for devices where WebGL2 is unavailable. Smooth camera easing focuses the selected station; the user can also rotate, tilt, zoom, hover for location, or use the ◎ Locate control. Location is only as accurate as the station directory. No D1, KV, credentials, or new Cloudflare resources are needed.
-
-## Mobile UI fidelity pass (2026-10-20)
-
-The mobile landing view was rebuilt against a 390 CSS-pixel reference viewport. It now follows the reference hierarchy: brand wordmark, softly animated *dotted* earth, country/region count, two-line headline, coral listening button, sky link and source credits. The dots are rendered as a GPU fragment-shader mask using the locally bundled earth map, rather than a flat satellite photo. Desktop layout follows the same palette; it is not a byte-for-byte copy of the original app.
-
-Browsing keeps the existing read-only Radio Browser API, station search, favorites and geographic coordinate selection. A horizontally scrollable genre filter now groups **loaded, playable** stations (the numbers are not presented as full global station counts). The player adds a radio-source browser entry point. The station's reported state/country and coordinates are shown only when available; this implementation currently does not call GeoNames for city lookups. The `about.html` and `privacy.html` pages explain this independent implementation and actual data sources.
-
-No D1, KV, secrets, new Workers, or domain changes are required. Cloudflare Pages is connected to GitHub and publishes the `main` branch using `npm run build` to `dist`.
-
-### Testing
-
-Run `npm run check` for syntax, API validation tests, mobile DOM/design invariants, and build. On a real mobile device, verify:
-1. On iPhone Safari: hero layout at short/long viewport heights, smooth rotating dotted globe, exact content order and responsive footer.
-2. Tap Start: audio connects to an HTTPS-supported Radio Browser station (upstream availability varies).
-3. Tap Explore: browse the sky and filter by genre; bottom source list opens from the player.
-4. Switch Earth: select a station with real coordinates and confirm accurate map marker, fly-to and name.
-5. Confirm the static pages `/about.html`, `/privacy.html` and `/earth.webp` return 200 and `GET /api/stations?limit=5` returns JSON.
-## Desktop homepage revision (2026-10-20)
-
-The quotation and its author credit have been removed. Desktop landing now uses an oversized rendition of the same shared point-cloud earth, with independently draggable motion, an editorial left hero, horizontally aligned buttons and discreet lower-right credits. When a real previously tuned station is stored in this browser, its station name, published region/country, language, and bitrate are displayed with "Continue listening" and "another random station" actions. New visitors keep the random-listening introduction and sky entry point. No made-up station names or local clock times are shown. The globe now has a Canvas2D dotted fallback when WebGL2 cannot initialize. No D1, Secrets or Cloudflare configuration changes are required.
+### 数据与归属
+Radio Browser 提供公开电台目录、音源及已发布的经纬度；站点不自行猜测缺失城市，GeoNames API 当前未接入。NASA Blue Marble Next Generation（NASA Earth Observatory / Reto Stöckli）影像仅用于陆地遮罩。音源可因地域限制、证书、浏览器编码和上游离线而失败。
