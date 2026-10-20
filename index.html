@@ -23,10 +23,6 @@
         <img class="brand-logo" src="https://logo.foxtang.com/portraits/default-blue-transparent.png" alt="" width="29" height="29" decoding="async" />
         <span>Foxtang Radio</span>
       </button>
-      <div class="header-quote">
-        <div data-i18n="tagline">缘溪行，忘路之远近</div>
-        <small data-i18n="quoteBy">— 陶渊明《桃花源记》</small>
-      </div>
       <nav class="top-actions" aria-label="电台操作">
         <button class="nav-link" id="toggleSearch" type="button"><span class="nav-ic">⌕</span><span data-i18n="search">搜索</span></button>
         <button class="nav-link" id="toggleSaved" type="button"><span class="nav-ic">♡</span><span data-i18n="saved">收藏</span><span id="savedCount" class="nav-count" hidden>0</span></button>
@@ -38,9 +34,11 @@
     <main>
       <section class="welcome" id="welcome" aria-labelledby="heroTitle">
         <div class="welcome-copy">
-          <p class="eyebrow"><span class="live-pip"></span><span data-i18n="eyebrow">211 个国家和地区的电台</span></p>
+          <p class="eyebrow"><span class="live-pip"></span><span id="heroEyebrow" data-i18n="eyebrow">211 个国家和地区的电台</span></p>
           <h1 id="heroTitle" data-i18n="heroTitle">随机一站，<br>听见世界。</h1>
-          <p class="hero-subtitle" data-i18n="heroSubtitle">按下播放，目的地交给运气。</p>
+          <p class="hero-subtitle" id="heroSubtitle" data-i18n="heroSubtitle">按下播放，目的地交给运气。</p>
+          <p class="hero-place" id="heroPlace" hidden></p>
+          <p class="hero-details" id="heroDetails" hidden></p>
           <div class="hero-buttons">
             <button id="startButton" class="primary-cta" type="button"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg><span data-i18n="start">开始收听</span></button>
             <button id="exploreButton" class="secondary-cta" type="button" data-i18n="explore">先逛逛星图</button>
@@ -74,7 +72,7 @@
         <p class="player-message" id="playerMessage" role="status" aria-live="polite"></p>
       </section>
     </main>
-    <footer class="footer" id="footer"><span id="footer-attribution"><span data-i18n="sourceRadio">电台目录来自</span> <a href="https://www.radio-browser.info/" target="_blank" rel="noopener noreferrer">Radio Browser</a> <span class="sep">·</span> <span data-i18n="sourcePlaces">地理数据来自</span> <a href="https://www.geonames.org/" target="_blank" rel="noopener noreferrer">GeoNames</a></span><span class="sep">·</span><a href="/about.html" data-i18n="about">关于</a><span class="sep">·</span><a href="/privacy.html" data-i18n="privacy">隐私</a><span class="sep">·</span><a href="https://x.com/RoamDial" target="_blank" rel="noopener noreferrer">X</a></footer>
+    <footer class="footer" id="footer"><span id="footer-attribution"><span data-i18n="sourceRadio">电台目录来自</span> <a href="https://www.radio-browser.info/" target="_blank" rel="noopener noreferrer">Radio Browser</a> <span class="sep">·</span> <span data-i18n="sourcePlaces">电台坐标来自 Radio Browser</span></span><span class="sep">·</span><a href="/about.html" data-i18n="about">关于</a><span class="sep">·</span><a href="/privacy.html" data-i18n="privacy">隐私</a></footer>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 </body>

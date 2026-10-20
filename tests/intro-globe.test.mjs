@@ -8,7 +8,7 @@ function canvas() {
   handlers, style:{}, hidden:false,
   addEventListener:(type,cb)=>handlers.set(type,cb),
   setPointerCapture:()=>{},
-  getContext:(name)=>name==='webgl2'?null:({setTransform:()=>{}}),
+  getContext:(name)=>name==='webgl2'?null:({setTransform:()=>{},clearRect:()=>{}}),
   emit:(type,evt={})=>{const h=handlers.get(type);assert.ok(h,`listener ${type}`);h(evt);},
  };
 }
