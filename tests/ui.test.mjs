@@ -22,7 +22,8 @@ test('browse view lists real station sources and dynamic genre categories withou
  assert.ok(app.includes("/api/stations?"));
 });
 test('landing globe uses WebGL textured dot mask and smooth animation, with no external globe shader CDN',()=>{
- for(const part of ['u_style','u_time','fwidth(grid)','land=smoothstep','grazing','limb']) assert.ok(earth.includes(part));
+ for(const part of ['u_time','fwidth(grid)','land=smoothstep','grazing','limb']) assert.ok(earth.includes(part));
+ assert.ok(!earth.includes('u_style'),'one globe material for both views');
  assert.ok(app.includes('scene.setLanding(false)'));
  assert.ok(app.includes('scene.setLanding(true)'));
 });
