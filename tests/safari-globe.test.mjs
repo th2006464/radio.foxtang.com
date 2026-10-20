@@ -6,7 +6,7 @@ import { isAppleMobileWebKit, seedGlobeDots } from '../src/scene.js';
 
 const load = path => readFile(new URL('../'+path, import.meta.url), 'utf8');
 
-test('Safari on iPhone/iPad including desktop UA iPad uses Canvas2D instead of failing WebGL', () => {
+test('Safari on iPhone/iPad is detected for adaptive performance controls', () => {
  assert.equal(isAppleMobileWebKit('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15'), true);
  assert.equal(isAppleMobileWebKit('Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15'), true);
  assert.equal(isAppleMobileWebKit('Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15', 'MacIntel', 5), true);
@@ -35,4 +35,27 @@ test('Earth-only UI has no star-mode switch, and entry always enters same globe 
  assert.doesNotMatch(scene, /drawSky\(|drawNebula\(|setView\('sky'\)|this\.view='sky'/);
  assert.match(scene, /this\.globe\.render\(this\.introRotation,this\.introTilt/);
  assert.match(scene, /this\.globe\.ready\?\(changed\?this\.globe\.render/);
+});
+
+test('iPhone attempts the same WebGL globe as desktop and lazily generates Canvas fallback', async () => {
+ const [scene,globe]=await Promise.all([load('src/scene.js'),load('src/globe.js')]);
+ assert.match(scene,/this\.mobile=isAppleMobileWebKit\(\)/);
+ assert.match(scene,/new GlobeRenderer\(this\.globeCanvas\)/);
+ assert.doesNotMatch(scene,/new GlobeRenderer\(this\.globeCanvas,\{disabled:this\.mobile/);
+ assert.match(scene,/if\(!rendered\)this\.fallback\.draw/);
+ assert.match(scene,/this\.dots=null;this\.lastKey=/);
+ assert.match(scene,/if\(!this\.dots\)this\.dots=seedGlobeDots\(\)/);
+ assert.match(scene,/enhance\(\)\{/);
+ assert.match(globe,/gl\.texParameteri\(gl\.TEXTURE_2D,gl\.TEXTURE_MIN_FILTER,gl\.LINEAR\)/);
+ assert.match(globe,/gl\.generateMipmap\(gl\.TEXTURE_2D\);gl\.texParameteri/);
+});
+
+test('mobile draw budgets and visual rhythm do not change desktop geometry', async () => {
+ const [scene,css]=await Promise.all([load('src/scene.js'),load('src/style.css')]);
+ assert.match(scene,/this\.mobile\?1\.3:1\.75/);
+ assert.match(scene,/this\.mobile\?\(this\.globe\.ready\?33:45\)/);
+ assert.match(scene,/this\.backgroundCacheKey=/);
+ assert.match(scene,/radius:Math\.min\(w\*\.43,h\*\.92,1050\)/);
+ assert.match(scene,/radius:Math\.min\(w\*\.46,h\*\.26,240\)/);
+ assert.match(css,/\.welcome h1\{font-family:Georgia,"Songti SC"/);
 });

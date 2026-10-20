@@ -4,12 +4,13 @@
 - 产品名：**Radio**；生产地址 `https://radio.foxtang.com/`。
 - 页面只保留**全球电台地球**（含点云材质、拖动与真实电台定位）；星图模式已删除。
 - Logo：`https://logo.foxtang.com/avatars-512/set-05/media.png`，网页与 favicon 一致，移动端使用约 30px 尺寸。
-- 桌面：WebGL2 点阵与大视口地球；iPhone / iPad WebKit：优先 Canvas2D 基础点阵 + 图片加载后增强；避免 WebGL 不可用时画面空白。
+- 桌面：维持 WebGL2 点阵与大视口地球；iPhone/iPad WebKit：优先同材质 WebGL2，GPU 失败时自动 Canvas2D，移动端限制 DPR/帧率并缓存背景。
 - 不修改 D1、KV、Secrets、Cron、Access 或其他项目的 DNS。
 
 ## Git 基线
 - 持续开发主分支：`main`，必须通过 PR 合并；生产部署由 Cloudflare Pages 的 GitHub 集成自动触发。
 - 稳定版本快照：`baseline/radio-2026-10-20-v1`，在**生产版本 Merge Commit 与 Cloudflare 版本 SHA 一致**后创建，并固定该提交作为后续回滚来源。
+- 新移动端部署快照计划固定于 `baseline/radio-2026-10-20-v2-mobile-gpu`，指向本轮生产 Merge Commit；此引用标记**已部署代码来源**，不意味着真实 Safari 性能验收通过，v1 继续保留。
 - 此基线使用独立**分支**而不是伪造 Git tag；没有经过实际创建的 tag 不应宣称存在。分支一经建立，不再改写或强推，后续新版本使用新基线分支。
 - PR Merge Commit、GitHub Actions Verify Run ID、Cloudflare Deployment ID 以 GitHub 和 Cloudflare 真实记录为准，禁止在文档中编造。
 

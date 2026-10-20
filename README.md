@@ -6,7 +6,7 @@
 - **地球唯一视图**：首页与收听时使用同一套光点地球与坐标系，支持拖动、惯性、镜头放大与台站定位；已移除星图与模式切换。
 - 全球 Radio Browser 公开广播目录、搜索、国家/地区显示、随机收听、码率/语言/类型筛选。
 - 上次收听、收藏、前后切台、分享、音量、中文和英文。
-- 桌面 WebGL2 GPU 光点；iPhone/iPad WebKit 优先使用可立即绘制的 Canvas2D 点阵后备，地理纹理加载后增强细节。
+- 桌面和支持 WebGL2 的 iPhone/iPad 共用 GPU 点阵地球。移动端限制 DPR、帧率并缓存静态背景；只有 WebGL 初始化或渲染失败时才启用 Canvas2D 后备。
 - Cloudflare Pages Functions 仅提供电台目录 API；音频直连广播站。无 D1、KV、Cron、Secrets。
 
 ## 代码与文档
@@ -32,7 +32,7 @@ npm run build   # 生成 dist/
 
 GitHub `main` 已连接 Cloudflare Pages 项目 `radio-foxtang-com`。生产构建命令 `npm run build`、产物目录 `dist`；合并主分支自动触发部署。**不要操作不相关的 DNS、Worker、D1、Access。**
 
-合并后必须验证 Cloudflare Production deployment 的 `commit_hash` 与 Merge Commit 一致，且构建、页面和关键静态资源成功；以 `baseline/radio-2026-10-20-v1` 分支固定稳定提交（创建步骤见文档）。**自动化测试或桌面模拟不等于真实 iPhone Safari 实机验收。**
+合并后必须验证 Cloudflare Production deployment 的 `commit_hash` 与 Merge Commit 一致，且构建、页面和关键静态资源成功；以 `baseline/radio-2026-10-20-v1` 分支固定稳定提交（创建步骤见文档）。**自动化测试或桌面模拟不等于真实 iPhone Safari 实机验收。** 本次新移动端性能发布的快照名称是 `baseline/radio-2026-10-20-v2-mobile-gpu`，旧 `v1` 保留不动。
 
 ### 数据与归属
 Radio Browser 提供公开电台目录、音源及已发布的经纬度；站点不自行猜测缺失城市，GeoNames API 当前未接入。NASA Blue Marble Next Generation（NASA Earth Observatory / Reto Stöckli）影像仅用于陆地遮罩。音源可因地域限制、证书、浏览器编码和上游离线而失败。
