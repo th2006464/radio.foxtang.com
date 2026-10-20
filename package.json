@@ -1,0 +1,12 @@
+{
+  "name": "radio-foxtang",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "check": "node --check src/app.js && node --check src/scene.js && node --check functions/api/stations.js && node --test tests/*.test.mjs && npm run build"
+  },
+  "engines": {"node": ">=20"}
+}
