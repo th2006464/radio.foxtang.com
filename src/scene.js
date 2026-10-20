@@ -1,5 +1,5 @@
 import { GlobeRenderer } from './globe.js';
-// Dependency-free, canvas-rendered radio sky and orthographic earth.
+// Canvas starfield and station markers, plus WebGL point-earth and orthographic globe.
 // Coordinates in earth mode only come from actual Radio Browser geo data.
 export function hash(value) { let h = 2166136261; for (const c of String(value)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
 export function randomFrom(seed) { let s = seed >>> 0; return () => { s = (Math.imul(1664525, s) + 1013904223) >>> 0; return s / 4294967296; }; }
@@ -30,8 +30,8 @@ export class Universe {
  constructor(canvas,onSelect){
   this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:false});this.onSelect=onSelect;
   this.stations=[];this.stars=[];this.points=[];this.active='';this.view='sky';this.panX=0;this.panY=0;this.zoom=1;this.rotation=-15;this.tilt=10;
-  this.width=1;this.height=1;this.last=0;this.running=true;this.reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  this.bg=this.makeStars(700);this.pointer=null;this.dragged=false;this.target=null;
+  this.landing=true;this.introRotation=104;this.width=1;this.height=1;this.last=0;this.running=true;this.reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  this.bg=this.makeStars(1100);this.pointer=null;this.dragged=false;this.target=null;
   this.globeCanvas=document.getElementById('globeCanvas');this.markerCanvas=document.getElementById('markersCanvas');this.markerCtx=this.markerCanvas.getContext('2d');
   this.globe=new GlobeRenderer(this.globeCanvas);this.tooltip=document.getElementById('mapTip');
   this.resize=()=>this.setSize();window.addEventListener('resize',this.resize);this.bind();this.setSize();this.setView('sky');
@@ -44,7 +44,8 @@ export class Universe {
  }
  setStations(stations){this.stations=stations.slice(0,4500);this.stars=this.stations.slice(0,3200).map((s,i)=>{const r=randomFrom(hash(s.stationuuid||s.name||i));const genre=stationGenre(s),center=clusters[genre],a=r()*Math.PI*2;
   const radius=.07+Math.pow(r(),.55)*.29;return {station:s,x:center[0]+Math.cos(a)*radius*1.38,y:center[1]+Math.sin(a)*radius*.82,size:.7+r()*1.45,genre,phase:r()*6.28};});}
- setView(view){this.view=view==='earth'?'earth':'sky';this.globeCanvas.hidden=this.view!=='earth';this.markerCanvas.hidden=this.view!=='earth';this.lastGpuKey=null;this.tooltip.hidden=true;
+ setLanding(enabled){this.landing=!!enabled;this.globeCanvas.hidden=!this.landing&&this.view!=='earth';this.markerCanvas.hidden=this.landing||this.view!=='earth';this.lastGpuKey=null;}
+ setView(view){this.view=view==='earth'?'earth':'sky';this.globeCanvas.hidden=!this.landing&&this.view!=='earth';this.markerCanvas.hidden=this.landing||this.view!=='earth';this.lastGpuKey=null;this.tooltip.hidden=true;
   if(this.view==='earth'&&this.active){const selected=this.selectedStation||this.stations.find(s=>s.stationuuid===this.active);if(selected)this.focus(selected);}}
  select(station){this.selectedStation=station;this.active=station?.stationuuid||'';if(this.view==='earth'&&station)this.focus(station);}
  focus(station){if(!Number.isFinite(station?.geo_lat)||!Number.isFinite(station?.geo_long))return false;
@@ -65,9 +66,9 @@ export class Universe {
   c.addEventListener('pointerleave',()=>{this.tooltip.hidden=true;});
   c.addEventListener('wheel',e=>{e.preventDefault();this.zoomBy(e.deltaY>0?.88:1.14);},{passive:false});
  }
- drawBackground(t){const c=this.ctx,w=this.width,h=this.height;c.fillStyle='#070b15';c.fillRect(0,0,w,h);
-  const gradient=c.createRadialGradient(w*.47,h*.46,0,w*.5,h*.5,Math.max(w,h)*.72);gradient.addColorStop(0,'#131b30');gradient.addColorStop(.55,'#0b1120');gradient.addColorStop(1,'#050811');c.fillStyle=gradient;c.fillRect(0,0,w,h);
-  for(const s of this.bg){const alpha=this.reduce?1:.88+Math.sin(t*.00053+s.phase)*.12;c.fillStyle=`rgba(202,213,255,${s.alpha*alpha})`;c.fillRect(s.x*w,s.y*h,s.size,s.size);}}
+ drawBackground(t){const c=this.ctx,w=this.width,h=this.height;c.fillStyle=this.landing?'#101f1d':'#101e1b';c.fillRect(0,0,w,h);
+  const gradient=c.createRadialGradient(w*.47,h*.46,0,w*.5,h*.5,Math.max(w,h)*.72);gradient.addColorStop(0,this.landing?'#172723':'#192c24');gradient.addColorStop(.55,this.landing?'#0f211d':'#101d1b');gradient.addColorStop(1,'#081512');c.fillStyle=gradient;c.fillRect(0,0,w,h);
+  for(const s of this.bg){const alpha=this.reduce?1:.88+Math.sin(t*.00053+s.phase)*.12;c.fillStyle=`rgba(203,219,202,${s.alpha*alpha*(this.landing?.32:.72)})`;c.fillRect(s.x*w,s.y*h,s.size,s.size);}}
  drawNebula(){const c=this.ctx,w=this.width,h=this.height,scale=Math.min(w,h)*.65*this.zoom;
   for(let i=0;i<clusters.length;i++){const a=clusters[i],ox=w/2+this.panX+a[0]*scale*1.35,oy=h/2+this.panY+a[1]*scale,r=scale*.35;
    c.save();c.translate(ox,oy);c.scale(1,.65);const g=c.createRadialGradient(0,0,0,0,0,r);g.addColorStop(0,`rgba(${palette[i]},.062)`);g.addColorStop(.4,`rgba(${palette[i]},.026)`);g.addColorStop(1,`rgba(${palette[i]},0)`);
@@ -77,6 +78,7 @@ export class Universe {
    const twinkle=this.reduce?1:.82+Math.sin(t*.0012+p.phase)*.18,r=(active?3.5:p.size)*Math.min(1.55,Math.sqrt(this.zoom));
    if(active){c.strokeStyle='rgba(190,202,255,.7)';c.lineWidth=1;c.beginPath();c.arc(x,y,16+2*Math.sin(t*.002),0,6.283);c.stroke();}
    c.fillStyle=`rgba(${palette[p.genre]},${active?1:Math.min(.94,twinkle*.76)})`;c.beginPath();c.arc(x,y,r,0,6.283);c.fill();this.points.push({x,y,station:p.station});}}
+ drawLanding(t,dt){const w=this.width,h=this.height;const radius=Math.min(w*.414,h*.245,210);const cx=w*.51;const cy=w>740?h*.45:Math.min(h*.448,315);this.introRotation+=(this.reduce?0:dt*.00185);this.globe.render(this.introRotation,14,cx,cy,radius,1,t);this.points=[];}
  drawEarth(t){const w=this.width,h=this.height;const radius=Math.min(w*.38,h*.39)*this.zoom,cx=w/2,cy=h*.48;
   const gpuKey=[this.rotation.toFixed(4),this.tilt.toFixed(4),radius.toFixed(3),this.globe.textureReady,this.width,this.height].join(':');
   const changed=gpuKey!==this.lastGpuKey;this.lastGpuKey=gpuKey;
@@ -106,11 +108,11 @@ export class Universe {
   }
  }
  animate=(t)=>{if(!this.running)return;
-  const frameInterval=this.view==='earth'&&!this.reduce&&(this.target||(this.pointer&&this.dragged))?16:32;
+  const frameInterval=this.landing?16:this.view==='earth'&&!this.reduce&&(this.target||(this.pointer&&this.dragged))?16:32;
   if(t-this.last>=frameInterval){const dt=Math.min(64,Math.max(1,t-this.last));this.last=t;
    if(this.target){const k=this.reduce?1:1-Math.exp(-dt/430);this.rotation+=(this.target.rotation-this.rotation)*k;this.tilt+=(this.target.tilt-this.tilt)*k;this.zoom+=(this.target.zoom-this.zoom)*k;
     if(Math.abs(this.rotation-this.target.rotation)<.03&&Math.abs(this.tilt-this.target.tilt)<.03&&Math.abs(this.zoom-this.target.zoom)<.003)this.target=null;}
-   this.drawBackground(t);if(this.view==='earth')this.drawEarth(t);else this.drawSky(t);
+   this.drawBackground(t);if(this.landing)this.drawLanding(t,dt);else if(this.view==='earth')this.drawEarth(t);else this.drawSky(t);
   }
   this.frame=requestAnimationFrame(this.animate);
  };

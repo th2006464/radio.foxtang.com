@@ -43,3 +43,20 @@ npm run check   # syntax, native Node tests, and build
 The Earth mode uses a **WebGL2 shader** and a locally bundled NASA Blue Marble Next Generation equirectangular JPEG (`earth.webp`). Earth imagery: NASA Earth Observatory / Reto Stöckli (Blue Marble Next Generation, https://earthobservatory.nasa.gov/features/BlueMarble). The UI renders dots exclusively from Radio Browser-provided `geo_lat` / `geo_long` values and shows the station's published region and country, not invented city labels. If a station omits geographic coordinates, the locate control is disabled. Stations are fetched through a Pages Function (top stations + geolocated random sample); markers are a sample, not a claim to exhaustively map every world broadcaster.
 
 The WebGL2 sphere and Canvas 2D station overlay are separate, and a basic fallback is provided for devices where WebGL2 is unavailable. Smooth camera easing focuses the selected station; the user can also rotate, tilt, zoom, hover for location, or use the ◎ Locate control. Location is only as accurate as the station directory. No D1, KV, credentials, or new Cloudflare resources are needed.
+
+## Mobile UI fidelity pass (2026-10-20)
+
+The mobile landing view was rebuilt against a 390 CSS-pixel reference viewport. It now follows the reference hierarchy: ring wordmark, Tao Yuanming quotation, softly animated *dotted* earth, country/region count, two-line headline, coral listening button, sky link and source credits. The dots are rendered as a GPU fragment-shader mask using the locally bundled earth map, rather than a flat satellite photo. Desktop layout follows the same palette; it is not a byte-for-byte copy of the original app.
+
+Browsing keeps the existing read-only Radio Browser API, station search, favorites and geographic coordinate selection. A horizontally scrollable genre filter now groups **loaded, playable** stations (the numbers are not presented as full global station counts). The player adds a radio-source browser entry point. The station's reported state/country and coordinates are shown only when available; this implementation currently does not call GeoNames for city lookups. The `about.html` and `privacy.html` pages explain this independent implementation and actual data sources.
+
+No D1, KV, secrets, new Workers, or domain changes are required. Cloudflare Pages is connected to GitHub and publishes the `main` branch using `npm run build` to `dist`.
+
+### Testing
+
+Run `npm run check` for syntax, API validation tests, mobile DOM/design invariants, and build. On a real mobile device, verify:
+1. On iPhone Safari: hero layout at short/long viewport heights, smooth rotating dotted globe, exact content order and responsive footer.
+2. Tap Start: audio connects to an HTTPS-supported Radio Browser station (upstream availability varies).
+3. Tap Explore: browse the sky and filter by genre; bottom source list opens from the player.
+4. Switch Earth: select a station with real coordinates and confirm accurate map marker, fly-to and name.
+5. Confirm the static pages `/about.html`, `/privacy.html` and `/earth.webp` return 200 and `GET /api/stations?limit=5` returns JSON.
