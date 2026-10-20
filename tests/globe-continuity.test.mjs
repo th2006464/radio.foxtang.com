@@ -70,5 +70,5 @@ test('returning to intro keeps the explored geographic hemisphere',()=>withGlobe
 
 test('start listening always opens the same globe even when radio station lacks coordinates',()=>{
  assert.ok(app.includes("scene.select(s);state.started=true;enterExplore();setSceneView('earth');"));
- assert.ok(app.includes("$('exploreButton').addEventListener('click',()=>{enterExplore();setSceneView('sky');})"));
+ assert.ok(app.includes("else{enterExplore();setSceneView('sky');}"));
 });

@@ -26,14 +26,74 @@ const continents = [
 [[-8,50],[-5,54],[-7,58],[-11,55]],
 [[167,-35],[174,-41],[178,-39],[171,-34]]
 ];
+// Canvas2D safety net for browsers without WebGL2. Same bundled Earth imagery.
+class PointGlobeFallback {
+ constructor(){
+  this.dots=null;this.lastKey='';this.cache=null;
+  if(typeof Image==='undefined'||typeof document==='undefined'||typeof document.createElement!=='function')return;
+  this.cache=document.createElement('canvas');this.ctx=this.cache.getContext('2d');
+  if(!this.ctx)return;
+  const im=new Image();im.onload=()=>{
+   try{
+    const sample=document.createElement('canvas');sample.width=768;sample.height=384;
+    const c=sample.getContext('2d',{willReadFrequently:true});if(!c)return;
+    c.drawImage(im,0,0,sample.width,sample.height);
+    const rgba=c.getImageData(0,0,sample.width,sample.height).data;
+    const dots=[];
+    for(let y=2;y<sample.height-2;y+=3){const lat=(.5-y/sample.height)*Math.PI;
+     for(let x=2;x<sample.width;x+=3){const offset=(y*sample.width+x)*4;
+      const r=rgba[offset],g=rgba[offset+1],b=rgba[offset+2];
+      const signal=r*.86+g*.78-b*.9;
+      const salt=((x*73+y*137)%101)/101;
+      const level=signal>32?(salt>.90?3:2):signal>13?1:0;
+      if(level===0&&salt>.15)continue;
+      const jitterX=(((x*41+y*79)%17)-8)*.18,jitterY=(((x*67+y*31)%19)-9)*.14;
+      const jitterLat=(.5-(y+jitterY)/sample.height)*Math.PI;
+      dots.push({lon:((x+jitterX)/sample.width-.5)*Math.PI*2,sin:Math.sin(jitterLat),cos:Math.cos(jitterLat),level});
+     }
+    }
+    this.dots=dots;this.lastKey='';
+   }catch{/* Keep background visible if texture decoding fails. */}
+  };
+  im.src='/earth.webp';
+ }
+ draw(ctx,rotation,tilt,cx,cy,radius,w,h){
+  if(!this.dots?.length||!this.ctx)return false;
+  const key=[Math.round(rotation*1.7),Math.round(tilt*1.7),Math.round(radius/2),Math.round(cx/2),Math.round(cy/2),w,h].join(':');
+  if(this.cache.width!==w||this.cache.height!==h){this.cache.width=w;this.cache.height=h;this.lastKey='';}
+  if(this.lastKey!==key){
+   const c=this.ctx;c.clearRect(0,0,w,h);
+   const longitude=rotation*Math.PI/180,t=tilt*Math.PI/180,sinTilt=Math.sin(t),cosTilt=Math.cos(t);
+   const paths=[new Path2D(),new Path2D(),new Path2D(),new Path2D()];
+   const dotSize=radius>500?1.65:1.05;
+   for(const d of this.dots){const shift=d.lon-longitude;
+    const sn=Math.sin(shift),cs=Math.cos(shift),z=d.sin*sinTilt+d.cos*cs*cosTilt;
+    if(z<0.01)continue;
+    const px=cx+d.cos*sn*radius,py=cy-(d.sin*cosTilt-d.cos*cs*sinTilt)*radius;
+    if(px<0||px>w||py<0||py>h)continue;
+    paths[d.level].rect(px,py,dotSize,dotSize);
+   }
+   const colors=['rgba(144,165,156,.11)','rgba(141,169,155,.32)','rgba(203,219,194,.66)','rgba(255,245,222,.95)'];
+   for(let i=0;i<paths.length;i++){c.fillStyle=colors[i];c.fill(paths[i]);}
+   c.beginPath();c.arc(cx,cy,radius,0,Math.PI*2);
+   c.strokeStyle='rgba(182,210,188,.12)';c.lineWidth=2;c.stroke();
+   c.save();c.globalCompositeOperation='screen';const halo=c.createRadialGradient(cx-radius*.3,cy-radius*.35,radius*.5,cx,cy,radius*1.18);
+   halo.addColorStop(0,'rgba(218,230,205,0)');halo.addColorStop(.75,'rgba(218,230,205,0)');halo.addColorStop(.90,'rgba(196,215,190,.035)');halo.addColorStop(1,'rgba(196,215,190,0)');
+   c.fillStyle=halo;c.fillRect(Math.max(0,cx-radius*1.2),Math.max(0,cy-radius*1.2),radius*2.4,radius*2.4);c.restore();
+   this.lastKey=key;
+  }
+  ctx.drawImage(this.cache,0,0,w,h);return true;
+ }
+}
+
 export class Universe {
  constructor(canvas,onSelect){
   this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:false});this.onSelect=onSelect;
   this.stations=[];this.stars=[];this.points=[];this.active='';this.view='sky';this.panX=0;this.panY=0;this.zoom=1;this.rotation=-15;this.tilt=10;
   this.landing=true;this.introRotation=104;this.introTilt=14;this.introVelocityX=0;this.introVelocityY=0;this.width=1;this.height=1;this.last=0;this.running=true;this.reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  this.bg=this.makeStars(1100);this.pointer=null;this.dragged=false;this.target=null;this.globeTransition=null;
+  this.bg=this.makeStars(1100);this.pointer=null;this.dragged=false;this.target=null;this.globeTransition=null;this.landingStation=null;this.introGoal=null;
   this.globeCanvas=document.getElementById('globeCanvas');this.markerCanvas=document.getElementById('markersCanvas');this.markerCtx=this.markerCanvas.getContext('2d');
-  this.globe=new GlobeRenderer(this.globeCanvas);this.tooltip=document.getElementById('mapTip');
+  this.globe=new GlobeRenderer(this.globeCanvas);this.fallback=new PointGlobeFallback();this.tooltip=document.getElementById('mapTip');
   this.resize=()=>this.setSize();window.addEventListener('resize',this.resize);this.bind();this.setSize();this.setView('sky');
   this.frame=requestAnimationFrame(this.animate);
  }
@@ -59,17 +119,24 @@ export class Universe {
    }
   }
   this.landing=next;this.introVelocityX=0;this.introVelocityY=0;this.pointer=null;this.dragged=false;
-  this.globeCanvas.hidden=!this.landing&&this.view!=='earth';this.markerCanvas.hidden=this.landing||this.view!=='earth';this.lastGpuKey=null;
+  this.globeCanvas.hidden=!this.landing&&this.view!=='earth';this.markerCanvas.hidden=!this.landing&&this.view!=='earth';this.lastGpuKey=null;
  }
- setView(view){this.view=view==='earth'?'earth':'sky';if(this.view==='sky')this.globeTransition=null;this.globeCanvas.hidden=!this.landing&&this.view!=='earth';this.markerCanvas.hidden=this.landing||this.view!=='earth';this.lastGpuKey=null;this.tooltip.hidden=true;
+ setView(view){this.view=view==='earth'?'earth':'sky';if(this.view==='sky')this.globeTransition=null;this.globeCanvas.hidden=!this.landing&&this.view!=='earth';this.markerCanvas.hidden=!this.landing&&this.view!=='earth';this.lastGpuKey=null;this.tooltip.hidden=true;
   if(this.view==='earth'&&this.active){const selected=this.selectedStation||this.stations.find(s=>s.stationuuid===this.active);if(selected)this.focus(selected);}}
+ setLandingStation(station){
+  const valid=station&&Number.isFinite(station.geo_lat)&&Number.isFinite(station.geo_long)?station:null;
+  if(this.landingStation?.stationuuid===valid?.stationuuid)return;
+  this.landingStation=valid;
+  if(valid&&this.landing&&!this.reduce)this.introGoal={rotation:nearestLongitude(this.introRotation,valid.geo_long),tilt:Math.max(-68,Math.min(68,valid.geo_lat))};
+  else this.introGoal=null;
+ }
  select(station){this.selectedStation=station;this.active=station?.stationuuid||'';if(this.view==='earth'&&station)this.focus(station);}
  focus(station){if(!Number.isFinite(station?.geo_lat)||!Number.isFinite(station?.geo_long))return false;
   this.target={rotation:nearestLongitude(this.rotation,station.geo_long),tilt:Math.max(-75,Math.min(75,station.geo_lat)),zoom:Math.max(this.zoom,1.25)};return true;}
  zoomBy(factor){const start=this.target?.zoom??this.zoom;this.target={rotation:this.target?.rotation??this.rotation,tilt:this.target?.tilt??this.tilt,zoom:Math.max(.65,Math.min(3.5,start*factor))};}
  reset(){this.target=null;this.panX=0;this.panY=0;this.zoom=1;this.rotation=-15;this.tilt=10;}
  closest(x,y,range=19){let found=null,best=range*range;for(const p of this.points){const d=(p.x-x)**2+(p.y-y)**2;if(d<best){best=d;found=p;}}return found;}
- introBounds(){const w=this.width,h=this.height;return {cx:w*.51,cy:w>740?h*.45:Math.min(h*.448,315),radius:Math.min(w*.414,h*.245,210)};}
+ introBounds(){const w=this.width,h=this.height;return w>740?{cx:w*.52,cy:h*.46,radius:Math.min(w*.43,h*.92,1050)}:{cx:w*.51,cy:Math.min(h*.448,315),radius:Math.min(w*.414,h*.245,210)};}
  introHit(x,y){const {cx,cy,radius}=this.introBounds();return (x-cx)**2+(y-cy)**2<=(radius*1.08)**2;}
  moveTooltip(e){if(this.landing){this.tooltip.hidden=true;this.canvas.style.cursor=this.introHit(e.clientX,e.clientY)?'grab':'default';return;}
   if(this.view!=='earth'||this.dragged||this.pointer){this.tooltip.hidden=true;return;}
@@ -79,7 +146,7 @@ export class Universe {
    if(this.pointer||this.landing&&!this.introHit(e.clientX,e.clientY))return;
    this.pointer={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,lastTime:e.timeStamp||0,mode:this.landing?'intro':'explore'};
    this.dragged=false;this.target=null;this.tooltip.hidden=true;
-   if(this.landing){this.introVelocityX=0;this.introVelocityY=0;c.style.cursor='grabbing';}
+   if(this.landing){this.introGoal=null;this.introVelocityX=0;this.introVelocityY=0;c.style.cursor='grabbing';}
    c.setPointerCapture?.(e.pointerId);
   });
   c.addEventListener('pointermove',e=>{
@@ -125,20 +192,36 @@ export class Universe {
  drawLanding(t,dt){const {cx,cy,radius}=this.introBounds();
   if(!this.pointer||this.pointer.mode!=='intro'){
    if(!this.reduce){
+    if(this.introGoal){const k=1-Math.exp(-dt/570);this.introRotation+=(this.introGoal.rotation-this.introRotation)*k;this.introTilt+=(this.introGoal.tilt-this.introTilt)*k;if(Math.abs(this.introRotation-this.introGoal.rotation)<.04&&Math.abs(this.introTilt-this.introGoal.tilt)<.04)this.introGoal=null;}
     const moving=Math.abs(this.introVelocityX)+Math.abs(this.introVelocityY)>.00012;
     if(moving){
      this.introRotation+=this.introVelocityX*dt;
      this.introTilt=Math.max(-78,Math.min(78,this.introTilt+this.introVelocityY*dt));
      const friction=Math.exp(-dt/510);this.introVelocityX*=friction;this.introVelocityY*=friction;
-    }else{this.introVelocityX=0;this.introVelocityY=0;this.introRotation+=dt*.00185;}
+    }else{this.introVelocityX=0;this.introVelocityY=0;if(!this.introGoal)this.introRotation+=dt*.00185;}
    }
   }
-  this.globe.render(this.introRotation,this.introTilt,cx,cy,radius,t);this.points=[];
+  const rendered=this.globe.render(this.introRotation,this.introTilt,cx,cy,radius,t);
+  if(!rendered)this.fallback.draw(this.ctx,this.introRotation,this.introTilt,cx,cy,radius,this.width,this.height);
+  this.points=[];
+  const c=this.markerCtx;c.clearRect(0,0,this.width,this.height);
+  const station=this.landingStation;
+  if(this.width>740&&station){
+   const p=projectGlobe(station.geo_lat,station.geo_long,this.introRotation,this.introTilt);
+   if(p.visible){const x=cx+p.x*radius,y=cy+p.y*radius;
+    if(x>=65&&x<this.width-295&&y>80&&y<this.height-80){
+     c.beginPath();c.arc(x,y,24,0,Math.PI*2);c.strokeStyle='rgba(238,247,235,.66)';c.lineWidth=1.3;c.stroke();
+     c.beginPath();c.arc(x,y,5,0,Math.PI*2);c.fillStyle='#fa6d4e';c.fill();
+     c.fillStyle='#f76e50';c.font='600 13px -apple-system, BlinkMacSystemFont, sans-serif';c.fillText('●  '+(document.documentElement.lang==='zh-CN'?'已锁定':'TUNED'),x+38,y-9);
+     c.fillStyle='rgba(249,250,241,.94)';c.font='600 18px -apple-system, BlinkMacSystemFont, sans-serif';c.fillText(station.name.slice(0,36),x+38,y+18);
+    }
+   }
+  }
  }
  drawEarth(t){
   const w=this.width,h=this.height;
   // A camera dolly over the SAME WebGL point-cloud globe, never a texture swap.
-  const endRadius=Math.min(Math.max(w*.56,245),h*.62)*this.zoom;
+  const endRadius=(w>740?Math.min(w*.53,h*1.13,1150):Math.min(Math.max(w*.56,245),h*.62))*this.zoom;
   let cx=w/2,cy=h*.48,radius=endRadius;
   if(this.globeTransition){
    const fly=this.globeTransition;
@@ -155,7 +238,7 @@ export class Universe {
   const changed=gpuKey!==this.lastGpuKey;this.lastGpuKey=gpuKey;
   const rendered=this.globe.ready?(changed?this.globe.render(this.rotation,this.tilt,cx,cy,radius,t):true):false;
   const c=this.markerCtx;c.clearRect(0,0,w,h);this.points=[];
-  if(!rendered){c.beginPath();c.arc(cx,cy,radius,0,Math.PI*2);c.fillStyle='#12241f';c.fill();c.strokeStyle='rgba(199,215,197,.35)';c.stroke();}
+  if(!rendered&&!this.fallback.draw(this.ctx,this.rotation,this.tilt,cx,cy,radius,w,h)){c.beginPath();c.arc(cx,cy,radius,0,Math.PI*2);c.fillStyle='#12241f';c.fill();c.strokeStyle='rgba(199,215,197,.35)';c.stroke();}
   const groupPath=new Path2D(),activePts=[];
   for(const s of [...this.stations,...(this.selectedStation&&!this.stations.some(st=>st.stationuuid===this.selectedStation.stationuuid)?[this.selectedStation]:[])]){if(!Number.isFinite(s.geo_lat)||!Number.isFinite(s.geo_long))continue;
    const p=projectGlobe(s.geo_lat,s.geo_long,this.rotation,this.tilt);if(!p.visible)continue;

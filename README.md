@@ -46,7 +46,7 @@ The WebGL2 sphere and Canvas 2D station overlay are separate, and a basic fallba
 
 ## Mobile UI fidelity pass (2026-10-20)
 
-The mobile landing view was rebuilt against a 390 CSS-pixel reference viewport. It now follows the reference hierarchy: ring wordmark, Tao Yuanming quotation, softly animated *dotted* earth, country/region count, two-line headline, coral listening button, sky link and source credits. The dots are rendered as a GPU fragment-shader mask using the locally bundled earth map, rather than a flat satellite photo. Desktop layout follows the same palette; it is not a byte-for-byte copy of the original app.
+The mobile landing view was rebuilt against a 390 CSS-pixel reference viewport. It now follows the reference hierarchy: brand wordmark, softly animated *dotted* earth, country/region count, two-line headline, coral listening button, sky link and source credits. The dots are rendered as a GPU fragment-shader mask using the locally bundled earth map, rather than a flat satellite photo. Desktop layout follows the same palette; it is not a byte-for-byte copy of the original app.
 
 Browsing keeps the existing read-only Radio Browser API, station search, favorites and geographic coordinate selection. A horizontally scrollable genre filter now groups **loaded, playable** stations (the numbers are not presented as full global station counts). The player adds a radio-source browser entry point. The station's reported state/country and coordinates are shown only when available; this implementation currently does not call GeoNames for city lookups. The `about.html` and `privacy.html` pages explain this independent implementation and actual data sources.
 
@@ -60,3 +60,6 @@ Run `npm run check` for syntax, API validation tests, mobile DOM/design invarian
 3. Tap Explore: browse the sky and filter by genre; bottom source list opens from the player.
 4. Switch Earth: select a station with real coordinates and confirm accurate map marker, fly-to and name.
 5. Confirm the static pages `/about.html`, `/privacy.html` and `/earth.webp` return 200 and `GET /api/stations?limit=5` returns JSON.
+## Desktop homepage revision (2026-10-20)
+
+The quotation and its author credit have been removed. Desktop landing now uses an oversized rendition of the same shared point-cloud earth, with independently draggable motion, an editorial left hero, horizontally aligned buttons and discreet lower-right credits. When a real previously tuned station is stored in this browser, its station name, published region/country, language, and bitrate are displayed with "Continue listening" and "another random station" actions. New visitors keep the random-listening introduction and sky entry point. No made-up station names or local clock times are shown. The globe now has a Canvas2D dotted fallback when WebGL2 cannot initialize. No D1, Secrets or Cloudflare configuration changes are required.
