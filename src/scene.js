@@ -39,10 +39,12 @@ export function seedGlobeDots(){const dots=[];for(let latitude=-84;latitude<=84;
 // Canvas2D safety net for browsers without WebGL2. Same bundled Earth imagery.
 class PointGlobeFallback {
  constructor(){
-  this.dots=seedGlobeDots();this.lastKey='';this.cache=null;
+  this.dots=null;this.lastKey='';this.cache=null;this.ctx=null;this.enhancementStarted=false;
+ }
+ enhance(){
+  if(this.enhancementStarted)return;
+  this.enhancementStarted=true;
   if(typeof Image==='undefined'||typeof document==='undefined'||typeof document.createElement!=='function')return;
-  this.cache=document.createElement('canvas');this.ctx=this.cache.getContext('2d');
-  if(!this.ctx)return;
   const im=new Image();im.onload=()=>{
    try{
     const sample=document.createElement('canvas');sample.width=768;sample.height=384;
@@ -50,8 +52,8 @@ class PointGlobeFallback {
     c.drawImage(im,0,0,sample.width,sample.height);
     const rgba=c.getImageData(0,0,sample.width,sample.height).data;
     const dots=[];
-    for(let y=2;y<sample.height-2;y+=4){const lat=(.5-y/sample.height)*Math.PI;
-     for(let x=2;x<sample.width;x+=4){const offset=(y*sample.width+x)*4;
+    for(let y=2;y<sample.height-2;y+=6){const lat=(.5-y/sample.height)*Math.PI;
+     for(let x=2;x<sample.width;x+=6){const offset=(y*sample.width+x)*4;
       const r=rgba[offset],g=rgba[offset+1],b=rgba[offset+2];
       const signal=r*.86+g*.78-b*.9;
       const salt=((x*73+y*137)%101)/101;
@@ -68,7 +70,14 @@ class PointGlobeFallback {
   im.src='/earth.webp';
  }
  draw(ctx,rotation,tilt,cx,cy,radius,w,h){
-  if(!this.dots?.length||!this.ctx)return false;
+  if(!this.dots)this.dots=seedGlobeDots();
+  if(!this.dots.length)return false;
+  if(!this.ctx){
+   if(typeof document==='undefined'||typeof document.createElement!=='function')return false;
+   this.cache=document.createElement('canvas');this.ctx=this.cache.getContext('2d');
+   if(!this.ctx)return false;
+  }
+  this.enhance();
   const key=[Math.round(rotation*1.7),Math.round(tilt*1.7),Math.round(radius/2),Math.round(cx/2),Math.round(cy/2),w,h].join(':');
   if(this.cache.width!==w||this.cache.height!==h){this.cache.width=w;this.cache.height=h;this.lastKey='';}
   if(this.lastKey!==key){
@@ -103,16 +112,21 @@ export class Universe {
   this.landing=true;this.introRotation=104;this.introTilt=14;this.introVelocityX=0;this.introVelocityY=0;this.width=1;this.height=1;this.last=0;this.running=true;this.reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   this.bg=this.makeStars(1100);this.pointer=null;this.dragged=false;this.target=null;this.globeTransition=null;this.landingStation=null;this.introGoal=null;
   this.globeCanvas=document.getElementById('globeCanvas');this.markerCanvas=document.getElementById('markersCanvas');this.markerCtx=this.markerCanvas.getContext('2d');
-  this.preferCanvas=isAppleMobileWebKit();this.globe=new GlobeRenderer(this.globeCanvas,{disabled:this.preferCanvas});this.fallback=new PointGlobeFallback();this.tooltip=document.getElementById('mapTip');
+  this.mobile=isAppleMobileWebKit();this.globe=new GlobeRenderer(this.globeCanvas);this.fallback=new PointGlobeFallback();this.tooltip=document.getElementById('mapTip');
+  this.backgroundCache=null;this.backgroundCacheKey='';
   this.resize=()=>this.setSize();window.addEventListener('resize',this.resize);this.bind();this.setSize();this.setView('earth');
   this.frame=requestAnimationFrame(this.animate);
  }
  makeStars(n){const r=randomFrom(149734);return Array.from({length:n},()=>({x:r(),y:r(),size:r()*.95+.1,alpha:r()*.6+.15,phase:r()*6.3}));}
- setSize(){this.width=innerWidth;this.height=innerHeight;const dpr=Math.min(devicePixelRatio||1,1.75);this.dpr=dpr;
+ setSize(){this.width=innerWidth;this.height=innerHeight;const dpr=Math.min(devicePixelRatio||1,this.mobile?1.3:1.75);this.dpr=dpr;
+  this.backgroundCacheKey='';
   for(const canvas of [this.canvas,this.markerCanvas]){canvas.width=Math.round(this.width*dpr);canvas.height=Math.round(this.height*dpr);canvas.style.width=this.width+'px';canvas.style.height=this.height+'px';}
   this.ctx.setTransform(dpr,0,0,dpr,0,0);this.markerCtx.setTransform(dpr,0,0,dpr,0,0);this.globe.resize(this.width,this.height,dpr);
  }
- setStations(stations){this.stations=stations.slice(0,4500);}
+ setStations(stations){
+  const limit=this.mobile?1100:4500;
+  this.stations=stations.filter(station=>Number.isFinite(station.geo_lat)&&Number.isFinite(station.geo_long)).slice(0,limit);
+ }
  setLanding(enabled){
   const next=!!enabled;
   if(next!==this.landing){
@@ -144,7 +158,7 @@ export class Universe {
  zoomBy(factor){const start=this.target?.zoom??this.zoom;this.target={rotation:this.target?.rotation??this.rotation,tilt:this.target?.tilt??this.tilt,zoom:Math.max(.65,Math.min(3.5,start*factor))};}
  reset(){this.target=null;this.panX=0;this.panY=0;this.zoom=1;this.rotation=-15;this.tilt=10;}
  closest(x,y,range=19){let found=null,best=range*range;for(const p of this.points){const d=(p.x-x)**2+(p.y-y)**2;if(d<best){best=d;found=p;}}return found;}
- introBounds(){const w=this.width,h=this.height;return w>740?{cx:w*.52,cy:h*.46,radius:Math.min(w*.43,h*.92,1050)}:{cx:w*.51,cy:Math.min(h*.448,315),radius:Math.min(w*.414,h*.245,210)};}
+ introBounds(){const w=this.width,h=this.height;return w>740?{cx:w*.52,cy:h*.46,radius:Math.min(w*.43,h*.92,1050)}:{cx:w*.51,cy:Math.min(h*.43,340),radius:Math.min(w*.46,h*.26,240)};}
  introHit(x,y){const {cx,cy,radius}=this.introBounds();return (x-cx)**2+(y-cy)**2<=(radius*1.08)**2;}
  moveTooltip(e){if(this.landing){this.tooltip.hidden=true;this.canvas.style.cursor=this.introHit(e.clientX,e.clientY)?'grab':'default';return;}
   if(this.view!=='earth'||this.dragged||this.pointer){this.tooltip.hidden=true;return;}
@@ -184,9 +198,22 @@ export class Universe {
   c.addEventListener('pointerleave',()=>{this.tooltip.hidden=true;});
   c.addEventListener('wheel',e=>{if(this.landing)return;e.preventDefault();this.zoomBy(e.deltaY>0?.88:1.14);},{passive:false});
  }
- drawBackground(t){const c=this.ctx,w=this.width,h=this.height;c.fillStyle=this.landing?'#101f1d':'#101e1b';c.fillRect(0,0,w,h);
+ drawBackground(t){const c=this.ctx,w=this.width,h=this.height;
+  // Cache the mobile gradient and stars once per layout/state to avoid repainting 1100 points.
+  if(this.mobile&&this.backgroundCacheKey===`${w}x${h}:${this.landing}`&&this.backgroundCache){
+   c.drawImage(this.backgroundCache,0,0,w,h);return;
+  }
+  c.fillStyle=this.landing?'#101f1d':'#101e1b';c.fillRect(0,0,w,h);
   const gradient=c.createRadialGradient(w*.47,h*.46,0,w*.5,h*.5,Math.max(w,h)*.72);gradient.addColorStop(0,this.landing?'#172723':'#192c24');gradient.addColorStop(.55,this.landing?'#0f211d':'#101d1b');gradient.addColorStop(1,'#081512');c.fillStyle=gradient;c.fillRect(0,0,w,h);
-  for(const s of this.bg){const alpha=this.reduce?1:.88+Math.sin(t*.00053+s.phase)*.12;c.fillStyle=`rgba(203,219,202,${s.alpha*alpha*(this.landing?.32:.72)})`;c.fillRect(s.x*w,s.y*h,s.size,s.size);}}
+  for(const s of this.bg){const alpha=this.reduce||this.mobile?1:.88+Math.sin(t*.00053+s.phase)*.12;c.fillStyle=`rgba(203,219,202,${s.alpha*alpha*(this.landing?.32:.72)})`;c.fillRect(s.x*w,s.y*h,s.size,s.size);}
+  if(this.mobile&&typeof document!=='undefined'&&typeof document.createElement==='function'){
+   try{
+    const cache=this.backgroundCache??document.createElement('canvas');
+    if(cache.width!==w||cache.height!==h){cache.width=w;cache.height=h;}
+    const ctx=cache.getContext('2d');if(ctx){ctx.clearRect(0,0,w,h);ctx.drawImage(this.canvas,0,0,w,h);this.backgroundCache=cache;this.backgroundCacheKey=`${w}x${h}:${this.landing}`;}
+   }catch{/* Keep drawing if Safari refuses an auxiliary canvas. */}
+  }
+ }
  drawLanding(t,dt){const {cx,cy,radius}=this.introBounds();
   if(!this.pointer||this.pointer.mode!=='intro'){
    if(!this.reduce){
@@ -260,7 +287,7 @@ export class Universe {
   }
  }
  animate=(t)=>{if(!this.running)return;
-  const frameInterval=this.preferCanvas?40:this.landing||!this.reduce&&(this.globeTransition||this.target||(this.pointer&&this.dragged))?16:32;
+  const frameInterval=this.mobile?(this.globe.ready?33:45):this.landing||!this.reduce&&(this.globeTransition||this.target||(this.pointer&&this.dragged))?16:32;
   if(t-this.last>=frameInterval){const dt=Math.min(64,Math.max(1,t-this.last));this.last=t;
    if(this.target){const k=this.reduce?1:1-Math.exp(-dt/430);this.rotation+=(this.target.rotation-this.rotation)*k;this.tilt+=(this.target.tilt-this.tilt)*k;this.zoom+=(this.target.zoom-this.zoom)*k;
     if(Math.abs(this.rotation-this.target.rotation)<.03&&Math.abs(this.tilt-this.target.tilt)<.03&&Math.abs(this.zoom-this.target.zoom)<.003)this.target=null;}
