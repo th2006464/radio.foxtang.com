@@ -49,7 +49,7 @@ export class Universe {
  select(station){this.selectedStation=station;this.active=station?.stationuuid||'';if(this.view==='earth'&&station)this.focus(station);}
  focus(station){if(!Number.isFinite(station?.geo_lat)||!Number.isFinite(station?.geo_long))return false;
   this.target={rotation:nearestLongitude(this.rotation,station.geo_long),tilt:Math.max(-75,Math.min(75,station.geo_lat)),zoom:Math.max(this.zoom,1.25)};return true;}
- zoomBy(factor){this.target=null;this.zoom=Math.max(.65,Math.min(3.5,this.zoom*factor));}
+ zoomBy(factor){const start=this.target?.zoom??this.zoom;this.target={rotation:this.target?.rotation??this.rotation,tilt:this.target?.tilt??this.tilt,zoom:Math.max(.65,Math.min(3.5,start*factor))};}
  reset(){this.target=null;this.panX=0;this.panY=0;this.zoom=1;this.rotation=-15;this.tilt=10;}
  closest(x,y,range=19){let found=null,best=range*range;for(const p of this.points){const d=(p.x-x)**2+(p.y-y)**2;if(d<best){best=d;found=p;}}return found;}
  moveTooltip(e){if(this.view!=='earth'||this.dragged||this.pointer){this.tooltip.hidden=true;return;}
@@ -106,7 +106,7 @@ export class Universe {
   }
  }
  animate=(t)=>{if(!this.running)return;
-  const frameInterval=this.view==='earth'&&!this.reduce&&this.target?16:32;
+  const frameInterval=this.view==='earth'&&!this.reduce&&(this.target||(this.pointer&&this.dragged))?16:32;
   if(t-this.last>=frameInterval){const dt=Math.min(64,Math.max(1,t-this.last));this.last=t;
    if(this.target){const k=this.reduce?1:1-Math.exp(-dt/430);this.rotation+=(this.target.rotation-this.rotation)*k;this.tilt+=(this.target.tilt-this.tilt)*k;this.zoom+=(this.target.zoom-this.zoom)*k;
     if(Math.abs(this.rotation-this.target.rotation)<.03&&Math.abs(this.tilt-this.target.tilt)<.03&&Math.abs(this.zoom-this.target.zoom)<.003)this.target=null;}
