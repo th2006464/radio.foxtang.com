@@ -37,3 +37,9 @@ npm run dev     # static UI preview on http://localhost:4173
 npm run build   # generate dist/
 npm run check   # syntax, native Node tests, and build
 ```
+
+## Globe update
+
+The Earth mode uses a **WebGL2 shader** and a locally bundled NASA Blue Marble Next Generation equirectangular JPEG (`earth.webp`). Earth imagery: NASA Earth Observatory / Reto Stöckli (Blue Marble Next Generation, https://earthobservatory.nasa.gov/features/BlueMarble). The UI renders dots exclusively from Radio Browser-provided `geo_lat` / `geo_long` values and shows the station's published region and country, not invented city labels. If a station omits geographic coordinates, the locate control is disabled. Stations are fetched through a Pages Function (top stations + geolocated random sample); markers are a sample, not a claim to exhaustively map every world broadcaster.
+
+The WebGL2 sphere and Canvas 2D station overlay are separate, and a basic fallback is provided for devices where WebGL2 is unavailable. Smooth camera easing focuses the selected station; the user can also rotate, tilt, zoom, hover for location, or use the ◎ Locate control. Location is only as accurate as the station directory. No D1, KV, credentials, or new Cloudflare resources are needed.
